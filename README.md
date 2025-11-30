@@ -2,7 +2,8 @@
 
 A powerful, feature-rich tool for downloading content from Fansly. Built with both GUI and CLI interfaces for maximum flexibility.
 
-![Fansly Downloader NG Screenshot GUI](resources/FanslyDownloaderNG_6jF6RlrylQ.png)
+![Fansly Downloader NG Screenshot GUI](resources\python_0E3fR5BqPK.png)
+![Fansly Downloader NG Bulk Cropper Screenshot](resources\python_yGNIgdcM4X.png)
 ![Fansly Downloader NG Screenshot](resources/fansly_ng_screenshot.png)
 
 ## Features
