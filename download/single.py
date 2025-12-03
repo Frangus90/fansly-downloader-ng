@@ -2,7 +2,7 @@
 
 
 from .common import get_unique_media_ids, process_download_accessible_media
-from .core import DownloadState
+from .downloadstate import DownloadState
 from .media import download_media_infos
 from .types import DownloadType
 
