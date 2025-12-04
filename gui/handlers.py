@@ -142,6 +142,80 @@ class EventHandlers:
         crop_window = ImageCropWindow(self.window, default_output_dir=default_output)
         crop_window.focus()
 
+    def import_subscriptions(self) -> dict:
+        """
+        Import all Fansly subscriptions.
+
+        Returns:
+            dict: {'added': int, 'skipped': int}
+        """
+        # Get API instance
+        api = self.state.config.get_api()
+
+        # Step 1: Get all subscriptions
+        response = api.get_subscriptions()
+
+        # Check HTTP status first
+        if response.status_code != 200:
+            # Try to get error details
+            try:
+                error_detail = response.json()
+                error_msg = error_detail.get('error', {}).get('message', response.text[:100])
+            except:
+                error_msg = response.text[:100] if response.text else 'No error details'
+            raise RuntimeError(f"Failed to fetch subscriptions from Fansly (HTTP {response.status_code}): {error_msg}")
+
+        # get_json_response_contents already validates and extracts the 'response' field
+        json_data = api.get_json_response_contents(response)
+
+        if not json_data:
+            raise RuntimeError("Failed to fetch subscriptions from Fansly (empty response)")
+
+        # json_data is already the 'response' object, not the full JSON
+        all_subscriptions = json_data.get('subscriptions', [])
+
+        # Filter for active subscriptions only (status 3 = active, status 5 = inactive)
+        subscriptions = [sub for sub in all_subscriptions if sub.get('status') == 3]
+
+        if not subscriptions:
+            return {'added': 0, 'skipped': 0}
+
+        # Step 2: Extract account IDs from active subscriptions
+        account_ids = [sub['accountId'] for sub in subscriptions]
+
+        # Step 3: Batch lookup accounts to get usernames
+        accounts_response = api.get_accounts_by_ids(account_ids)
+        # get_json_response_contents already validates and extracts the 'response' field
+        accounts_data = api.get_json_response_contents(accounts_response)
+
+        if not accounts_data:
+            raise RuntimeError("Failed to lookup account information")
+
+        # accounts_data is already the 'response' array
+        accounts = accounts_data if isinstance(accounts_data, list) else []
+
+        # Step 4: Extract usernames
+        usernames = [acc['username'] for acc in accounts if 'username' in acc]
+
+        # Step 5: Add to creator list (avoiding duplicates)
+        added = 0
+        skipped = 0
+
+        existing_creators = set(self.state.all_creators)
+
+        for username in usernames:
+            if username not in existing_creators:
+                self.state.all_creators.append(username)
+                self.state.selected_creators.add(username)  # Auto-select new imports
+                added += 1
+            else:
+                skipped += 1
+
+        # Step 6: Save GUI state
+        self.state.save_gui_state()
+
+        return {'added': added, 'skipped': skipped}
+
 
 class OnlyFansEventHandlers:
     """Handles OnlyFans GUI events"""
@@ -254,3 +328,81 @@ class OnlyFansEventHandlers:
             if messagebox.askyesno("Confirm Exit", "OF download in progress. Stop and exit?"):
                 self.download_manager.stop()
         self.window.destroy()
+
+    def import_subscriptions(self) -> dict:
+        """
+        Import all OnlyFans subscriptions.
+
+        Returns:
+            dict: {'added': int, 'skipped': int}
+        """
+        # Get API instance
+        api = self.state.config.get_api()
+
+        all_creators = []
+        offset = 0
+        limit = 100
+
+        # Paginate through all subscriptions
+        while True:
+            response = api.get_subscriptions(limit=limit, offset=offset)
+
+            if not response:
+                break
+
+            # Handle both list and dict responses
+            if isinstance(response, list):
+                # Response is a list directly
+                subscription_list = response
+                has_more = len(subscription_list) >= limit
+            elif isinstance(response, dict):
+                # Response is a dict with 'list' key
+                subscription_list = response.get('list', [])
+                has_more = response.get('hasMore', False) or len(subscription_list) >= limit
+            else:
+                raise RuntimeError(f"Unexpected response type: {type(response)}")
+
+            if not subscription_list:
+                break
+
+            # Extract usernames from response - only active subscriptions
+            for sub in subscription_list:
+                if not isinstance(sub, dict):
+                    continue
+
+                # Check if subscription is active
+                # OnlyFans uses 'subscribedBy' field to indicate active subscription
+                is_active = sub.get('subscribedBy', False)
+
+                # Also check for 'subscribed' field as fallback
+                if not is_active and 'subscribed' in sub:
+                    is_active = sub.get('subscribed', False)
+
+                # Only add if active and has username
+                if is_active and 'username' in sub:
+                    all_creators.append(sub['username'])
+
+            # Check if more pages exist
+            if not has_more:
+                break
+
+            offset += limit
+
+        # Add to creator list (avoiding duplicates)
+        added = 0
+        skipped = 0
+
+        existing_creators = set(self.state.all_creators)
+
+        for username in all_creators:
+            if username not in existing_creators:
+                self.state.all_creators.append(username)
+                self.state.selected_creators.add(username)  # Auto-select new imports
+                added += 1
+            else:
+                skipped += 1
+
+        # Save GUI state
+        self.state.save_gui_state()
+
+        return {'added': added, 'skipped': skipped}

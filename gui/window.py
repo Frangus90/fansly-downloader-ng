@@ -19,7 +19,7 @@ class MainWindow(ctk.CTk):
         # Window properties
         self.title("Fansly & OnlyFans Downloader NG v0.9.9")
         self.geometry("900x1000")
-        self.minsize(700, 800)
+        self.minsize(1000, 700)
 
         # Initialize tkdnd for drag-and-drop support in child windows
         self._init_tkdnd()

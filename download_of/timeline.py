@@ -38,6 +38,20 @@ def download_timeline(config: OnlyFansConfig, state: DownloadState) -> None:
 
         state.base_path = timeline_folder
 
+        # Check if creator has download history (folder exists and has files)
+        has_history = timeline_folder.exists() and any(timeline_folder.iterdir())
+
+        # Check if post limit should be applied
+        # Only apply to new creators when NOT in incremental mode
+        apply_post_limit = (
+            config.max_posts_per_creator is not None
+            and not config.incremental_mode
+            and not has_history
+        )
+
+        if apply_post_limit:
+            print_info(f"Post limit enabled: Will download up to {config.max_posts_per_creator} newest posts for this new creator")
+
         before_cursor = None
         total_posts = 0
         total_media = 0
@@ -88,6 +102,12 @@ def download_timeline(config: OnlyFansConfig, state: DownloadState) -> None:
                     # If stopped during media downloads, break from post loop too
                     if config.stop_flag and config.stop_flag.is_set():
                         break
+
+                # Check if post limit reached
+                if apply_post_limit and total_posts >= config.max_posts_per_creator:
+                    print_info(f"Reached post limit ({config.max_posts_per_creator} posts). Stopping timeline download.")
+                    print_info(f"Downloaded content from {total_posts} posts for this new creator.")
+                    break
 
                 # Check for more posts
                 has_more = response.get('hasMore', False)

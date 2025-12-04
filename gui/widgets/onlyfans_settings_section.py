@@ -61,16 +61,82 @@ class OnlyFansSettingsSection(ctk.CTkFrame):
         self.incremental_var = ctk.BooleanVar(value=False)
         self.incremental_check = ctk.CTkCheckBox(
             options_frame,
-            text="Incremental mode (skip already downloaded files)",
+            text="Incremental mode (skip downloaded)",
             variable=self.incremental_var,
         )
         self.incremental_check.pack(anchor="w", pady=2)
+
+        # Post limit for new creators
+        post_limit_frame = ctk.CTkFrame(options_frame)
+        post_limit_frame.pack(anchor="w", pady=2, fill="x")
+
+        self.post_limit_var = ctk.BooleanVar(value=False)
+        self.post_limit_check = ctk.CTkCheckBox(
+            post_limit_frame,
+            text="Limit posts for new creators:",
+            variable=self.post_limit_var,
+            command=self._on_post_limit_toggle,
+        )
+        self.post_limit_check.pack(side="left", padx=(0, 5))
+
+        self.post_limit_entry = ctk.CTkEntry(
+            post_limit_frame,
+            width=80,
+            placeholder_text="e.g. 100"
+        )
+        self.post_limit_entry.pack(side="left", padx=5)
+        self.post_limit_entry.configure(state="disabled")
+
+        post_limit_info = ctk.CTkLabel(
+            post_limit_frame,
+            text="(N newest posts for new creators)",
+            font=("Arial", 9),
+            text_color="gray"
+        )
+        post_limit_info.pack(side="left", padx=5)
+
+        # Rate Limiting Section
+        rate_limit_label = ctk.CTkLabel(self, text="Rate Limiting:", anchor="w")
+        rate_limit_label.grid(row=4, column=0, padx=10, pady=5, sticky="nw")
+
+        rate_limit_frame = ctk.CTkFrame(self)
+        rate_limit_frame.grid(row=4, column=1, columnspan=2, padx=10, pady=5, sticky="ew")
+
+        rate_limit_desc_label = ctk.CTkLabel(
+            rate_limit_frame,
+            text="Delay between requests:",
+            font=("Arial", 11)
+        )
+        rate_limit_desc_label.pack(side="left", padx=5)
+
+        self.rate_limit_slider = ctk.CTkSlider(
+            rate_limit_frame,
+            from_=0,
+            to=10,
+            number_of_steps=20,  # 0.5 second increments
+            command=self._on_rate_limit_change
+        )
+        self.rate_limit_slider.pack(side="left", padx=10, fill="x", expand=True)
+
+        self.rate_limit_value_label = ctk.CTkLabel(
+            rate_limit_frame,
+            text="2.0s",
+            width=50
+        )
+        self.rate_limit_value_label.pack(side="left", padx=5)
 
         # Configure grid weights
         self.grid_columnconfigure(1, weight=1)
 
         # Load from config
         self.load_from_config()
+
+    def _on_post_limit_toggle(self):
+        """Toggle post limit entry field"""
+        if self.post_limit_var.get():
+            self.post_limit_entry.configure(state="normal")
+        else:
+            self.post_limit_entry.configure(state="disabled")
 
     def browse_directory(self):
         """Open directory browser dialog"""
@@ -98,6 +164,10 @@ class OnlyFansSettingsSection(ctk.CTkFrame):
             else:
                 subprocess.run(["xdg-open", str(folder)], check=False)
 
+    def _on_rate_limit_change(self, value):
+        """Update rate limit value label"""
+        self.rate_limit_value_label.configure(text=f"{value:.1f}s")
+
     def load_from_config(self):
         """Load values from config"""
         # Directory
@@ -107,6 +177,22 @@ class OnlyFansSettingsSection(ctk.CTkFrame):
         # Incremental mode
         if hasattr(self.config, 'incremental_mode'):
             self.incremental_var.set(self.config.incremental_mode)
+
+        # Rate limit
+        if hasattr(self.config, 'rate_limit_delay'):
+            self.rate_limit_slider.set(self.config.rate_limit_delay)
+            self._on_rate_limit_change(self.config.rate_limit_delay)
+
+        # Post limit
+        if hasattr(self.config, 'max_posts_per_creator'):
+            if self.config.max_posts_per_creator is not None:
+                self.post_limit_var.set(True)
+                self.post_limit_entry.configure(state="normal")
+                self.post_limit_entry.delete(0, "end")
+                self.post_limit_entry.insert(0, str(self.config.max_posts_per_creator))
+            else:
+                self.post_limit_var.set(False)
+                self.post_limit_entry.configure(state="disabled")
 
     def save_to_config(self, config):
         """Save values to config"""
@@ -122,6 +208,22 @@ class OnlyFansSettingsSection(ctk.CTkFrame):
 
         # Incremental mode
         config.incremental_mode = self.incremental_var.get()
+
+        # Rate limit
+        config.rate_limit_delay = int(self.rate_limit_slider.get())
+
+        # Post limit
+        if self.post_limit_var.get():
+            try:
+                limit_value = int(self.post_limit_entry.get().strip())
+                if limit_value > 0:
+                    config.max_posts_per_creator = limit_value
+                else:
+                    config.max_posts_per_creator = None
+            except (ValueError, AttributeError):
+                config.max_posts_per_creator = None
+        else:
+            config.max_posts_per_creator = None
 
     def validate(self):
         """Validate settings"""

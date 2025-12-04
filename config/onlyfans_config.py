@@ -46,6 +46,10 @@ class OnlyFansConfig:
     rate_limit_delay: int = 2
     max_retries: int = 3
 
+    # Post limit for new creators (None = unlimited)
+    # Only applies when creator has no download history and not in incremental mode
+    max_posts_per_creator: Optional[int] = None
+
     # Cache
     last_run_timestamp: Optional[str] = None
 
@@ -138,6 +142,16 @@ def load_onlyfans_config(config: OnlyFansConfig) -> None:
         config.interactive = config._parser.getboolean('Options', 'interactive', fallback=True)
         config.prompt_on_exit = config._parser.getboolean('Options', 'prompt_on_exit', fallback=True)
 
+        # Optional int - post limit
+        max_posts_str = config._parser.get('Options', 'max_posts_per_creator', fallback=None)
+        if max_posts_str and max_posts_str.strip():
+            try:
+                config.max_posts_per_creator = int(max_posts_str)
+            except ValueError:
+                config.max_posts_per_creator = None
+        else:
+            config.max_posts_per_creator = None
+
     # Load cache
     if config._parser.has_section('Cache'):
         config.last_run_timestamp = config._parser.get('Cache', 'last_run_timestamp', fallback=None)
@@ -184,6 +198,12 @@ def save_onlyfans_config(config: OnlyFansConfig) -> None:
     config._parser.set('Options', 'incremental_mode', str(config.incremental_mode))
     config._parser.set('Options', 'interactive', str(config.interactive))
     config._parser.set('Options', 'prompt_on_exit', str(config.prompt_on_exit))
+
+    # Post limit (optional int)
+    if config.max_posts_per_creator is not None:
+        config._parser.set('Options', 'max_posts_per_creator', str(config.max_posts_per_creator))
+    else:
+        config._parser.set('Options', 'max_posts_per_creator', '')
 
     # Save cache
     if not config._parser.has_section('Cache'):

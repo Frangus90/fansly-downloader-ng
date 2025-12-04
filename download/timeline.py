@@ -59,6 +59,22 @@ def download_timeline(config: FanslyConfig, state: DownloadState) -> None:
     state_file = Path(config.download_directory) / "download_history.json"
     state_manager = DownloadStateManager(state_file)
 
+    # Check if creator has download history
+    has_history = state_manager.get_last_cursor(state.creator_name, "timeline") is not None
+
+    # Check if post limit should be applied
+    # Only apply to new creators when NOT in incremental mode
+    apply_post_limit = (
+        config.max_posts_per_creator is not None
+        and not config.incremental_mode
+        and not has_history
+    )
+
+    if apply_post_limit:
+        print_info(f"Post limit enabled: Will download up to {config.max_posts_per_creator} newest posts for this new creator")
+
+    posts_processed = 0  # Track total posts processed
+
     # Check for incremental mode
     after_cursor = '0'
     if config.incremental_mode:
@@ -207,6 +223,14 @@ def download_timeline(config: FanslyConfig, state: DownloadState) -> None:
                     )
 
                 print()
+
+                # Track posts processed for post limit feature
+                if apply_post_limit and 'posts' in timeline:
+                    posts_processed += len(timeline['posts'])
+                    if posts_processed >= config.max_posts_per_creator:
+                        print_info(f"Reached post limit ({config.max_posts_per_creator} posts). Stopping timeline download.")
+                        print_info(f"Downloaded content from {posts_processed} posts for this new creator.")
+                        break
 
                 # get next timeline_cursor
                 try:

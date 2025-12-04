@@ -101,6 +101,10 @@ class FanslyConfig(object):
     # Incremental download mode - only download new content since last run
     incremental_mode: bool = False
 
+    # Post limit for new creators (None = unlimited)
+    # Only applies when creator has no download history and not in incremental mode
+    max_posts_per_creator: Optional[int] = None
+
     # Cache
     cached_device_id: Optional[str] = None
     cached_device_id_timestamp: Optional[int] = None
@@ -207,6 +211,12 @@ class FanslyConfig(object):
         # Unsigned ints
         self._parser.set('Options', 'timeline_retries', str(self.timeline_retries))
         self._parser.set('Options', 'timeline_delay_seconds', str(self.timeline_delay_seconds))
+
+        # Post limit (optional int)
+        if self.max_posts_per_creator is not None:
+            self._parser.set('Options', 'max_posts_per_creator', str(self.max_posts_per_creator))
+        else:
+            self._parser.set('Options', 'max_posts_per_creator', '')
 
         # Cache
         if self._api is not None:

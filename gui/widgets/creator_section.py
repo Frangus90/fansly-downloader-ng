@@ -3,17 +3,20 @@ Creator selection widget with checkbox-based multi-select
 """
 
 import customtkinter as ctk
+import threading
+from tkinter import messagebox
 
 
 class CreatorSection(ctk.CTkFrame):
     """Creator username input section with checkbox-based selection"""
 
-    def __init__(self, parent, config, app_state):
+    def __init__(self, parent, config, app_state, import_callback=None):
         super().__init__(parent)
         self.config = config
         self.app_state = app_state  # Reference to app state for persistence
         self.creators = []  # List of all creator usernames
         self.creator_widgets = {}  # Dict: username -> {checkbox, frame, var}
+        self.import_callback = import_callback  # Callback for subscription import
 
         # Title
         title = ctk.CTkLabel(
@@ -41,14 +44,37 @@ class CreatorSection(ctk.CTkFrame):
         button_frame.grid(row=2, column=0, columnspan=3, padx=10, pady=5, sticky="ew")
 
         self.select_all_btn = ctk.CTkButton(
-            button_frame, text="Select All", width=100, command=self.select_all
+            button_frame, text="Select All", width=85, command=self.select_all
         )
-        self.select_all_btn.pack(side="left", padx=5)
+        self.select_all_btn.pack(side="left", padx=3)
 
         self.deselect_all_btn = ctk.CTkButton(
-            button_frame, text="Deselect All", width=100, command=self.deselect_all
+            button_frame, text="Deselect All", width=85, command=self.deselect_all
         )
-        self.deselect_all_btn.pack(side="left", padx=5)
+        self.deselect_all_btn.pack(side="left", padx=3)
+
+        # Remove Selected button
+        self.remove_selected_btn = ctk.CTkButton(
+            button_frame,
+            text="Remove Selected",
+            width=110,
+            command=self.remove_selected,
+            fg_color="#d32f2f",
+            hover_color="#9a0007"
+        )
+        self.remove_selected_btn.pack(side="left", padx=3)
+
+        # Import subscriptions button (if callback provided)
+        if import_callback:
+            self.import_subs_btn = ctk.CTkButton(
+                button_frame,
+                text="Import Subs",
+                width=95,
+                command=self._on_import_subscriptions,
+                fg_color="#1f6aa5",
+                hover_color="#144870"
+            )
+            self.import_subs_btn.pack(side="left", padx=3)
 
         # Scrollable frame for creator checkboxes
         self.scroll_frame = ctk.CTkScrollableFrame(self, height=400)
@@ -162,6 +188,35 @@ class CreatorSection(ctk.CTkFrame):
             widgets["var"].set(False)
         self.on_selection_changed()
 
+    def remove_selected(self):
+        """Remove all selected creators from the list"""
+        selected = self.get_selected_creators()
+
+        if not selected:
+            self.info_label.configure(text="⚠ No creators selected to remove", text_color="orange")
+            return
+
+        # Confirm removal
+        from tkinter import messagebox
+        count = len(selected)
+        if not messagebox.askyesno(
+            "Confirm Removal",
+            f"Remove {count} selected creator{'s' if count != 1 else ''}?\n\nThis cannot be undone."
+        ):
+            return
+
+        # Remove each selected creator
+        for username in selected:
+            self.remove_creator_by_name(username)
+
+        self.info_label.configure(
+            text=f"✓ Removed {count} creator{'s' if count != 1 else ''}",
+            text_color="green"
+        )
+
+        # Save changes
+        self._sync_and_save()
+
     def on_selection_changed(self):
         """Called when any checkbox changes"""
         self.update_info_label()
@@ -255,3 +310,47 @@ class CreatorSection(ctk.CTkFrame):
             text_color="green",
         )
         return True
+
+    def _on_import_subscriptions(self):
+        """Import subscriptions via callback"""
+        if not self.import_callback:
+            return
+
+        # Disable button during import
+        self.import_subs_btn.configure(state="disabled", text="Importing...")
+        self.info_label.configure(text="Fetching subscriptions...", text_color="blue")
+
+        # Run in background thread to avoid blocking GUI
+        def import_thread():
+            try:
+                result = self.import_callback()
+                # Update GUI on main thread
+                self.after(0, lambda: self._on_import_complete(result))
+            except Exception as e:
+                error_msg = str(e)
+                self.after(0, lambda: self._on_import_error(error_msg))
+
+        threading.Thread(target=import_thread, daemon=True).start()
+
+    def _on_import_complete(self, result: dict):
+        """Handle import completion"""
+        self.import_subs_btn.configure(state="normal", text="Import Subscriptions")
+
+        added_count = result.get('added', 0)
+        skipped_count = result.get('skipped', 0)
+        total = added_count + skipped_count
+
+        # Refresh the creator list display
+        if added_count > 0:
+            # Reload from app state
+            self.load_from_config()
+
+        message = f"Import complete!\n\nTotal subscriptions: {total}\nNew creators added: {added_count}\nAlready in list: {skipped_count}"
+        self.info_label.configure(text=f"✓ Imported {added_count} new creator{'s' if added_count != 1 else ''}", text_color="green")
+        messagebox.showinfo("Subscriptions Imported", message)
+
+    def _on_import_error(self, error_msg: str):
+        """Handle import error"""
+        self.import_subs_btn.configure(state="normal", text="Import Subscriptions")
+        self.info_label.configure(text="✗ Import failed", text_color="red")
+        messagebox.showerror("Import Failed", f"Failed to import subscriptions:\n\n{error_msg}")

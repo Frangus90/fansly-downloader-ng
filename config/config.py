@@ -233,10 +233,21 @@ def load_config(config: FanslyConfig) -> None:
         config.show_skipped_downloads = config._parser.getboolean(options_section, 'show_skipped_downloads', fallback=True)
         config.interactive = config._parser.getboolean(options_section, 'interactive', fallback=True)
         config.prompt_on_exit = config._parser.getboolean(options_section, 'prompt_on_exit', fallback=True)
+        config.incremental_mode = config._parser.getboolean(options_section, 'incremental_mode', fallback=False)
 
         # Numbers
         config.timeline_retries = config._parser.getint(options_section, 'timeline_retries', fallback=1)
         config.timeline_delay_seconds = config._parser.getint(options_section, 'timeline_delay_seconds', fallback=60)
+
+        # Optional int - post limit
+        max_posts_str = config._parser.get(options_section, 'max_posts_per_creator', fallback=None)
+        if max_posts_str and max_posts_str.strip():
+            try:
+                config.max_posts_per_creator = int(max_posts_str)
+            except ValueError:
+                config.max_posts_per_creator = None
+        else:
+            config.max_posts_per_creator = None
 
         #region Renamed Options
 

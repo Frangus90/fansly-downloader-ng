@@ -216,6 +216,36 @@ class FanslyApi(object):
         )
 
 
+    def get_subscriptions(self) -> Response:
+        """Get all subscriptions (active and expired) for the authenticated user.
+
+        Returns:
+            Response: Contains subscription list with stats including account IDs
+        """
+        return self.get_with_ngsw(
+            url='https://apiv3.fansly.com/api/v1/subscriptions',
+        )
+
+
+    def get_accounts_by_ids(self, account_ids: list[str]) -> Response:
+        """Batch lookup account information by account IDs.
+
+        Args:
+            account_ids: List of account IDs to look up
+
+        Returns:
+            Response: List of account objects with usernames and details
+        """
+        if not account_ids:
+            return None
+
+        # API accepts comma-separated IDs
+        ids_param = ','.join(account_ids)
+        return self.get_with_ngsw(
+            url=f"https://apiv3.fansly.com/api/v1/account?ids={ids_param}",
+        )
+
+
     def get_media_collections(self) -> Response:
         custom_params = {
             'limit': '9999',

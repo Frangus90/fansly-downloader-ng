@@ -58,7 +58,12 @@ def build_onlyfans_layout(parent, state, handlers):
 
     # Creator section (reuse with OF flag)
     from gui.widgets.creator_section import CreatorSection
-    sections["creator"] = CreatorSection(right_frame, state.config, state)
+    sections["creator"] = CreatorSection(
+        right_frame,
+        state.config,
+        state,
+        import_callback=handlers.import_subscriptions
+    )
     sections["creator"].pack(fill="both", expand=True, padx=5, pady=5)
 
     return sections

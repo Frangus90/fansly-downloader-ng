@@ -10,9 +10,9 @@ def build_layout(parent, state, handlers):
     main_frame = ctk.CTkFrame(parent)
     main_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-    # Configure 2-column grid (70/30 split)
-    main_frame.grid_columnconfigure(0, weight=7)  # Left column: 70%
-    main_frame.grid_columnconfigure(1, weight=3)  # Right column: 30%
+    # Configure 2-column grid (70/30 split) with minimum widths
+    main_frame.grid_columnconfigure(0, weight=7, minsize=480)  # Left column: 70%, min 480px
+    main_frame.grid_columnconfigure(1, weight=3, minsize=420)  # Right column: 30%, min 420px
     main_frame.grid_rowconfigure(0, weight=1)
 
     sections = {}
@@ -61,7 +61,12 @@ def build_layout(parent, state, handlers):
     # Creator section (right, full height)
     from gui.widgets.creator_section import CreatorSection
 
-    sections["creator"] = CreatorSection(right_frame, state.config, state)
+    sections["creator"] = CreatorSection(
+        right_frame,
+        state.config,
+        state,
+        import_callback=handlers.import_subscriptions
+    )
     sections["creator"].pack(fill="both", expand=True, padx=5, pady=5)
 
     return sections
