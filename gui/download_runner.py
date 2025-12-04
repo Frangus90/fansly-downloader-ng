@@ -63,3 +63,46 @@ def run_download(config, stop_flag, progress_callback, log_callback):
         download_timeline(config, state)
 
     return True
+
+
+def run_onlyfans_download(config, stop_flag, progress_callback, log_callback):
+    """
+    Run OnlyFans download process
+
+    This function is called in a worker thread for OF downloads.
+    """
+    # Import OF download modules
+    from download_of import download_timeline, get_creator_account_info
+    from download.downloadstate import DownloadState
+    from config.modes import DownloadMode
+    from textio import print_info
+
+    # Inject callbacks into config
+    config.gui_mode = True
+    config.progress_callback = progress_callback
+    config.log_callback = log_callback
+    config.stop_flag = stop_flag
+
+    # Enable GUI log routing
+    from textio import set_gui_config
+    set_gui_config(config)
+
+    # Process each creator
+    for creator_name in config.user_names:
+        if stop_flag.is_set():
+            break
+
+        state = DownloadState(creator_name=creator_name)
+
+        # Get creator info
+        get_creator_account_info(config, state)
+
+        # Debug: Show download mode
+        print_info(f"Download mode: {config.download_mode}")
+
+        # Download timeline (only mode supported for now)
+        if config.download_mode in (DownloadMode.TIMELINE, DownloadMode.NORMAL):
+            print_info("Starting timeline download...")
+            download_timeline(config, state)
+
+    return True

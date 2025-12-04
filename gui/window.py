@@ -17,7 +17,7 @@ class MainWindow(ctk.CTk):
         super().__init__()
 
         # Window properties
-        self.title("Fansly Downloader NG v0.9.9")
+        self.title("Fansly & OnlyFans Downloader NG v0.9.9")
         self.geometry("900x1000")
         self.minsize(700, 800)
 
@@ -96,8 +96,26 @@ class MainWindow(ctk.CTk):
         # Event handlers
         self.handlers = EventHandlers(self.app_state, self)
 
-        # Build UI
-        self.sections = build_layout(self, self.app_state, self.handlers)
+        # Create tabbed interface
+        self.tab_view = ctk.CTkTabview(self, width=880)
+        self.tab_view.pack(fill="both", expand=True, padx=10, pady=(10, 0))
+
+        # Add tabs
+        self.tab_view.add("Fansly")
+        self.tab_view.add("OnlyFans")
+
+        # Build Fansly UI in first tab
+        self.sections = build_layout(self.tab_view.tab("Fansly"), self.app_state, self.handlers)
+
+        # Build OnlyFans UI in second tab
+        from gui.tabs.onlyfans_tab import build_onlyfans_layout
+        from gui.state import OnlyFansAppState
+
+        self.of_app_state = OnlyFansAppState()
+        from gui.handlers import OnlyFansEventHandlers
+        self.of_handlers = OnlyFansEventHandlers(self.of_app_state, self)
+        self.of_sections = build_onlyfans_layout(self.tab_view.tab("OnlyFans"), self.of_app_state, self.of_handlers)
+        self.of_handlers.set_sections(self.of_sections)
 
         # Connect handlers to UI
         self.handlers.set_sections(self.sections)

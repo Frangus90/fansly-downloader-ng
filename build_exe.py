@@ -1,5 +1,5 @@
 """
-Build script to create standalone .exe for Fansly Downloader NG GUI
+Build script to create standalone .exe for Fansly & OnlyFans Downloader NG GUI
 Usage: python build_exe.py
 """
 
@@ -26,11 +26,14 @@ def build_exe():
     PyInstaller.__main__.run(
         [
             "fansly_downloader_gui.py",  # Entry point
-            "--name=FanslyDownloaderNG",  # Exe name
+            "--name=FanslyOFDownloaderNG",  # Exe name (updated for both platforms)
             "--onefile",  # Single exe file
             "--windowed",  # No console window
             "--icon=resources/fansly_ng.ico",  # Application icon
-            "--add-data=config.sample.ini;.",  # Include sample config
+            # Config files
+            "--add-data=config.sample.ini;.",  # Fansly sample config
+            "--add-data=onlyfans_config.ini;.",  # OF config template
+            # Base packages
             "--hidden-import=customtkinter",  # Ensure CTk included
             "--hidden-import=PIL",  # Ensure Pillow included
             "--hidden-import=plyvel",  # Ensure LevelDB included
@@ -39,6 +42,16 @@ def build_exe():
             "--hidden-import=rich",  # Ensure rich included
             "--hidden-import=m3u8",  # Ensure m3u8 included
             "--hidden-import=ImageHash",  # Ensure ImageHash included
+            # OnlyFans modules (NEW)
+            "--hidden-import=api.onlyfans_api",
+            "--hidden-import=api.onlyfans_auth",
+            "--hidden-import=config.onlyfans_config",
+            "--hidden-import=download_of",
+            "--hidden-import=download_of.timeline",
+            "--hidden-import=download_of.account",
+            "--hidden-import=gui.tabs.onlyfans_tab",
+            "--hidden-import=gui.widgets.onlyfans_auth",
+            "--hidden-import=gui.widgets.credential_help",
             "--clean",  # Clean cache
             "--noconfirm",  # Overwrite without asking
         ]
@@ -46,12 +59,13 @@ def build_exe():
 
     print("\n" + "=" * 60)
     print("✓ Build complete!")
-    print(f"✓ Executable: dist\\FanslyDownloaderNG.exe")
+    print(f"✓ Executable: dist\\FanslyOFDownloaderNG.exe")
 
-    if os.path.exists("dist\\FanslyDownloaderNG.exe"):
-        size_mb = os.path.getsize("dist\\FanslyDownloaderNG.exe") // 1024 // 1024
+    if os.path.exists("dist\\FanslyOFDownloaderNG.exe"):
+        size_mb = os.path.getsize("dist\\FanslyOFDownloaderNG.exe") // 1024 // 1024
         print(f"✓ Size: ~{size_mb} MB")
-        print("\nYou can now run: dist\\FanslyDownloaderNG.exe")
+        print("\nYou can now run: dist\\FanslyOFDownloaderNG.exe")
+        print("✓ Supports both Fansly and OnlyFans!")
     else:
         print("⚠ Warning: Executable not found!")
 

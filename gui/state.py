@@ -5,6 +5,7 @@ Application state management
 import json
 from pathlib import Path
 from config import FanslyConfig, load_config
+from config.onlyfans_config import OnlyFansConfig, load_onlyfans_config
 
 
 class AppState:
@@ -122,3 +123,76 @@ class AppState:
             print(f"Saved {len(self.all_creators)} creators to GUI state")
         except Exception as ex:
             print(f"GUI state save error: {ex}")
+
+
+class OnlyFansAppState:
+    """Application state for OnlyFans tab"""
+
+    def __init__(self):
+        self.config = OnlyFansConfig(program_version="1.0.0")
+        self.is_downloading = False
+        self.current_creator = None
+
+        # GUI-specific creator management
+        self.all_creators = []
+        self.selected_creators = set()
+
+        # GUI state file (separate from Fansly)
+        self.gui_state_file = Path.cwd() / "onlyfans_gui_state.json"
+
+        # Load config
+        self.load_config_file()
+
+        # Load GUI state
+        self.load_gui_state()
+
+    def load_config_file(self):
+        """Load OnlyFans configuration"""
+        try:
+            from gui.logger import log
+
+            log("OnlyFansAppState: Loading OF config...")
+            load_onlyfans_config(self.config)
+            log(f"OnlyFansAppState: Config loaded - sess: {'SET' if self.config.sess else 'NOT SET'}")
+
+        except Exception as ex:
+            from gui.logger import log
+            log(f"OnlyFansAppState: Config load error: {ex}")
+
+    def save_config_file(self):
+        """Save OnlyFans configuration"""
+        try:
+            if hasattr(self.config, '_save_config'):
+                self.config._save_config()
+        except Exception as ex:
+            print(f"OF config save error: {ex}")
+
+    def reset(self):
+        """Reset download state"""
+        self.is_downloading = False
+        self.current_creator = None
+
+    def load_gui_state(self):
+        """Load OF GUI state from json"""
+        try:
+            if self.gui_state_file.exists():
+                with open(self.gui_state_file, 'r', encoding='utf-8') as f:
+                    state = json.load(f)
+                    self.all_creators = state.get("creators", [])
+                    self.selected_creators = set(state.get("selected", []))
+        except Exception as ex:
+            print(f"OF GUI state load error: {ex}")
+            self.all_creators = []
+            self.selected_creators = set()
+
+    def save_gui_state(self):
+        """Save OF GUI state to json"""
+        try:
+            state = {
+                "creators": self.all_creators,
+                "selected": list(self.selected_creators)
+            }
+            with open(self.gui_state_file, 'w', encoding='utf-8') as f:
+                json.dump(state, f, indent=2, ensure_ascii=False)
+        except Exception as ex:
+            print(f"OF GUI state save error: {ex}")

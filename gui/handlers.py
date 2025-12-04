@@ -3,7 +3,7 @@ Event handlers for GUI actions
 """
 
 import tkinter.messagebox as messagebox
-from gui.download_manager import DownloadManager
+from gui.download_manager import DownloadManager, OnlyFansDownloadManager
 
 
 class EventHandlers:
@@ -141,3 +141,116 @@ class EventHandlers:
         # Open crop tool window
         crop_window = ImageCropWindow(self.window, default_output_dir=default_output)
         crop_window.focus()
+
+
+class OnlyFansEventHandlers:
+    """Handles OnlyFans GUI events"""
+
+    def __init__(self, state, window):
+        self.state = state
+        self.window = window
+        self.sections = None
+        self.download_manager = OnlyFansDownloadManager(
+            progress_callback=self.on_progress,
+            log_callback=self.on_log
+        )
+
+    def set_sections(self, sections):
+        """Set UI sections after layout is built"""
+        self.sections = sections
+
+    def on_start_download(self):
+        """Handle OF start button click"""
+        if not self.sections:
+            return
+
+        # Validate
+        if not self.state.config.has_credentials():
+            self.sections["log"].add_log("OnlyFans authentication required!", "error")
+            return
+
+        # Get selected creators
+        selected_creators = self.sections["creator"].get_selected_creators()
+        if not selected_creators:
+            self.sections["log"].add_log("No OF creators selected!", "error")
+            return
+
+        # Save config
+        self.sections["auth"].save_to_config()
+        self.sections["settings"].save_to_config(self.state.config)
+        self.sections["creator"].save_to_config(self.state.config)
+
+        # Set creators
+        self.state.config.user_names = set(selected_creators)
+
+        # Update UI
+        self.sections["buttons"]["start"].configure(state="disabled")
+        self.sections["buttons"]["stop"].configure(state="normal")
+        self.sections["status"]["label"].configure(text="OnlyFans: Downloading...")
+
+        # Start download
+        self.download_manager.start(self.state.config)
+        self.sections["log"].add_log("OF download started", "info")
+
+    def on_stop_download(self):
+        """Handle OF stop button click"""
+        if not self.sections:
+            return
+
+        self.download_manager.stop()
+        self.sections["log"].add_log("Stopping OF download...", "warning")
+        self.sections["buttons"]["start"].configure(state="normal")
+        self.sections["buttons"]["stop"].configure(state="disabled")
+        self.sections["status"]["label"].configure(text="OnlyFans: Stopped")
+
+    def on_progress(self, update):
+        """Handle progress update"""
+        if not self.sections:
+            return
+        self.window.after(0, self._update_progress_ui, update)
+
+    def _update_progress_ui(self, update):
+        """Update progress UI"""
+        if not self.sections:
+            return
+
+        self.sections["progress"].update_progress(update)
+
+        if update.status == "complete":
+            self.sections["buttons"]["start"].configure(state="normal")
+            self.sections["buttons"]["stop"].configure(state="disabled")
+            self.sections["status"]["label"].configure(text="OnlyFans: Complete")
+            self.sections["log"].add_log("OF download completed!", "info")
+
+        elif update.status == "error":
+            self.sections["buttons"]["start"].configure(state="normal")
+            self.sections["buttons"]["stop"].configure(state="disabled")
+            self.sections["status"]["label"].configure(text=f"OnlyFans: Error")
+
+    def on_log(self, message, level):
+        """Handle log message"""
+        if not self.sections:
+            return
+        self.window.after(0, self.sections["log"].add_log, message, level)
+
+    def on_open_crop_tool(self):
+        """Handle opening the image crop tool window"""
+        from gui.tools.image_crop_window import ImageCropWindow
+        from pathlib import Path
+
+        # Get default output directory from download settings
+        if self.state.config.download_directory:
+            default_output = Path(self.state.config.download_directory) / "processed"
+        else:
+            default_output = Path.cwd() / "Downloads" / "processed"
+
+        # Open crop tool window
+        crop_window = ImageCropWindow(self.window, default_output_dir=default_output)
+        crop_window.focus()
+
+    def on_close(self):
+        """Handle window close"""
+        if self.download_manager.is_running:
+            if messagebox.askyesno("Confirm Exit", "OF download in progress. Stop and exit?"):
+                self.download_manager.stop()
+        self.window.destroy()
