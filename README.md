@@ -1,20 +1,20 @@
-# Fansly Downloader NG
+# Fansly & OnlyFans Downloader NG
 
 <div align="center">
-  
+
   <a href="https://github.com/Frangus90/fansly-downloader-ng/releases/latest">
     <img src="https://img.shields.io/github/v/release/Frangus90/fansly-downloader-ng?color=%23b02d4a&display_name=tag&label=%F0%9F%9A%80%20Latest%20Compiled%20Release&style=flat-square" alt="Latest Release" />
   </a>
   </div>
 
 
-A powerful, feature-rich tool for downloading content from Fansly. Built with both GUI and CLI interfaces for maximum flexibility.
+A powerful, feature-rich tool for downloading content from Fansly and OnlyFans. Built with both GUI and CLI interfaces for maximum flexibility.
 
 ![Fansly Downloader NG Screenshot GUI](resources/python_0E3fR5BqPK.png)
 ![Fansly Downloader NG Bulk Cropper Screenshot](resources/python_yGNIgdcM4X.png)
 ![Fansly Downloader NG Screenshot](resources/fansly_ng_screenshot.png)
 
-This is a rewrite/refactoring of [Avnsx](https://github.com/Avnsx)'s original [Fansly Downloader](https://github.com/Avnsx/fansly-downloader). **Fansly Downloader NG** supports new features:
+This is a rewrite/refactoring of [Avnsx](https://github.com/Avnsx)'s original [Fansly Downloader](https://github.com/Avnsx/fansly-downloader), expanded to support both Fansly and OnlyFans. **Fansly & OnlyFans Downloader NG** supports new features:
 
 * Full command-line support for all options
 * `config.ini` not required to start the program anymore - a `config.ini` with all program defaults will be generated automatically
@@ -26,18 +26,20 @@ This is a rewrite/refactoring of [Avnsx](https://github.com/Avnsx)'s original [F
 * Easier-to-extend, modern, modular and robust codebase
 * It doesn't care about starring the repository
 
-**Fansly Downloader NG** is the go-to app for all your bulk media downloading needs. Download photos, videos, audio or any other media from Fansly. This powerful tool has got you covered! Say goodbye to the hassle of individually downloading each piece of media – now you can download them all or just some in one go.
+**Fansly & OnlyFans Downloader NG** is the go-to app for all your bulk media downloading needs. Download photos, videos, audio or any other media from Fansly and OnlyFans. This powerful dual-platform tool has got you covered! Say goodbye to the hassle of individually downloading each piece of media – now you can download them all or just some in one go.
 
 ## Features
 
-- **Multiple Download Modes** - Timeline posts, messages, and collections
-- **Modern GUI** - Dark theme interface with real-time progress tracking
-- **Command-Line Support** - Full CLI for automation and advanced users
+- **Dual-Platform Support** - Separate tabs for Fansly and OnlyFans with independent configurations
+- **Multiple Download Modes** - Timeline posts, messages, and collections (Fansly)
+- **Modern GUI** - Dark theme interface with tabbed platform switching and real-time progress tracking
+- **Command-Line Support** - Full CLI for automation and advanced users (both platforms)
 - **Incremental Downloads** - Download only new content since last run
 - **Smart Deduplication** - Skip files you already have
 - **Cross-Platform** - Windows, Linux, and macOS support
 - **Automatic Retry Logic** - Handles rate limiting and connection issues
 - **M3U8 Support** - Download streaming videos automatically
+- **Bulk Image Cropping** - Built-in tool for batch image processing (works for both platforms)
 - **Bulk Processing** - Easily update prior download folders
 - **Customizable** - Separate media into sub-folders, download previews, and more
 
@@ -45,14 +47,16 @@ For detailed configuration settings, see the [Wiki](https://github.com/prof79/fa
 
 ## Quick Start
 
-### Windows (Executable)
+### Fansly
+
+#### Windows (Executable)
 
 1. Download the latest release from the [releases page](https://github.com/prof79/fansly-downloader-ng/releases/latest)
 2. Extract and run `fansly_downloader_gui.exe`
 3. Complete the setup wizard with your Fansly auth token
 4. Add creators and start downloading
 
-### Python (All Platforms)
+#### Python (All Platforms)
 
 **Requirements:** Python 3.11 or higher
 
@@ -81,15 +85,46 @@ On Windows and macOS, the `Tkinter` module is typically included in the Python i
 
 Raw Python code versions of **Fansly Downloader NG** do not receive automatic updates. If an update is available you will be notified but need to manually download and set-up the [current repository](https://github.com/prof79/fansly-downloader-ng/archive/refs/heads/master.zip) again.
 
+### OnlyFans
+
+OnlyFans is supported through both GUI and CLI:
+
+#### GUI (Recommended)
+
+1. Run `fansly_downloader_gui.exe` (Windows) or `python fansly_downloader_gui.py`
+2. Switch to the **OnlyFans tab**
+3. Enter your OnlyFans credentials (sess, auth_id, user_agent, x-bc)
+4. Add creators and configure settings
+5. Click "Start OF Download"
+
+For help obtaining credentials, click the **"How to get credentials"** link in the OnlyFans tab.
+
+#### CLI
+
+```bash
+# Run OnlyFans downloader
+python onlyfans_downloader.py
+
+# Non-interactive mode
+python onlyfans_downloader.py -ni
+
+# Incremental mode
+python onlyfans_downloader.py -i
+```
+
+**Note:** OnlyFans uses a separate configuration file (`onlyfans_config.ini`) completely independent from Fansly settings.
+
 ## GUI Features
 
-- **Setup Wizard** - Automatic configuration on first run
-- **Creator Management** - Visual list to add/remove creators
+- **Dual-Platform Tabs** - Separate Fansly and OnlyFans tabs with independent configurations
+- **Setup Wizard** - Automatic configuration on first run (Fansly)
+- **Creator Management** - Visual list to add/remove creators (both platforms)
+- **Subscription Import** - Import all subscribed creators automatically (both platforms)
 - **Real-time Progress** - See downloads in progress with file counts
 - **Connection Testing** - Verify credentials before downloading
 - **Log Access** - Press Ctrl+L to view diagnostic logs
 - **Incremental Mode** - Toggle to download only new content
-- **Image Crop Tool** - Built-in bulk image cropping with drag-and-drop support
+- **Image Crop Tool** - Built-in bulk image cropping with drag-and-drop support (works for all downloads)
 
 ### Image Crop Tool
 
@@ -119,7 +154,9 @@ The built-in Image Crop Tool allows you to batch process and crop downloaded ima
 
 ## CLI Usage
 
-The command-line version supports all features with additional options for automation:
+The command-line version supports all features with additional options for automation.
+
+### Fansly CLI
 
 ```bash
 # Basic usage
@@ -140,9 +177,34 @@ python fansly_downloader_ng.py -ni -npox
 
 Run with `--help` to see all available options.
 
+### OnlyFans CLI
+
+```bash
+# Basic usage
+python onlyfans_downloader.py
+
+# Non-interactive mode (no prompts)
+python onlyfans_downloader.py -ni
+
+# Incremental mode (download only new content)
+python onlyfans_downloader.py -i
+
+# Specify creators via command line
+python onlyfans_downloader.py -u creator1,creator2
+
+# Silent mode for scripts/scheduled tasks
+python onlyfans_downloader.py -ni -npox
+```
+
+Run with `--help` to see all available options. OnlyFans uses `onlyfans_config.ini` for configuration.
+
 ## Configuration
 
-Settings are stored in `config.ini` which is created automatically on first run. You can edit this file to customize:
+The application uses separate configuration files for each platform:
+
+### Fansly Configuration (`config.ini`)
+
+Created automatically on first run for Fansly. Customize:
 
 - Download directory
 - Download modes (timeline, messages, collections)
@@ -150,6 +212,19 @@ Settings are stored in `config.ini` which is created automatically on first run.
 - Duplicate handling
 - Incremental mode settings
 - Debug logging
+
+### OnlyFans Configuration (`onlyfans_config.ini`)
+
+Created automatically when using OnlyFans features. Completely independent from Fansly settings:
+
+- Download directory
+- OnlyFans credentials (sess, auth_id, user_agent, x-bc)
+- Creator list
+- Rate limiting and retry settings
+- Incremental mode settings
+- Post limit for new creators
+
+**Note:** Both platforms maintain separate download histories and states, allowing you to use both simultaneously without conflicts.
 
 See the [Wiki](https://github.com/prof79/fansly-downloader-ng/wiki) for detailed configuration options.
 
@@ -210,11 +285,14 @@ pip install -r requirements-dev.txt
 
 ## FAQ
 
+**Q: Does this support OnlyFans?**
+A: Yes! Full OnlyFans support with both GUI (dedicated tab) and CLI (`onlyfans_downloader.py`). OnlyFans uses a completely separate configuration system from Fansly, so you can use both platforms simultaneously.
+
 **Q: Is this Windows-only?**
 A: No. The executable is Windows-only, but the Python version works on Windows, macOS, and Linux.
 
 **Q: Will I get banned?**
-A: While there are no guarantees, it's worth noting that among the 24,000+ previous users, there have been no reported incidents. The tool respects rate limits and mimics normal browser behavior.
+A: While there are no guarantees, it's worth noting that among the 24,000+ previous users, there have been no reported incidents. The tool respects rate limits and mimics normal browser behavior for both platforms.
 
 **Q: Does this bypass paywalls?**
 A: No. You can only download content you have legitimate access to through your subscriptions. No paywall bypassing features will be added.
@@ -253,6 +331,10 @@ This project is licensed under the GPL-3.0 License - see the [LICENSE](LICENSE) 
 
 ## Disclaimer
 
-This project is not affiliated with, sponsored by, or endorsed by Fansly or Select Media LLC. This tool is for educational purposes only and is designed for downloading content you have legitimate access to. The developer is not responsible for end-user actions. No paywall bypassing features will be added. No user data is collected during usage.
+This project is not affiliated with, sponsored by, or endorsed by Fansly, OnlyFans, Select Media LLC, or Fenix International Limited. This tool is for educational purposes only and is designed for downloading content you have legitimate access to. The developer is not responsible for end-user actions. No paywall bypassing features will be added. No user data is collected during usage.
 
-"Fansly" or [fansly.com](https://fansly.com/) is operated by Select Media LLC as stated on their "Contact" page. This repository and the provided content in it isn't in any way affiliated with, sponsored by, or endorsed by Select Media LLC or "Fansly". The developer (referred to: "prof79" in the following) of this code is not responsible for the end users actions, no unlawful activities of any kind are being encouraged. Statements and processes described in this repository only represent best practice guidance aimed at fostering an effective software usage. The repository was written purely for educational purposes, in an entirely theoretical environment. Thus, any information is presented on the condition that the developer of this code shall not be held liable in no event to you or anyone else for any direct, special, incidental, indirect or consequential damages of any kind, or any damages whatsoever, including without limitation, loss of profit, loss of use, savings or revenue, or the claims of third parties, whether the developer has advised of the possibility of such loss, however caused and on any theory of liability, arising out of or in connection with the possession, use or performance of this software. The material embodied in this repository is supplied to you "as-is" and without warranty of any kind, express, implied or otherwise, including without limitation, any warranty of fitness. This code does not bypass any paywalls & no end user information is collected during usage. Finally it is important to note that this GitHub repository is the sole branch maintained and owned by the developer and any third-party websites or entities, that might refer to or be referred from it are in no way affiliated with Fansly Downloader, either directly or indirectly. This disclaimer is preliminary and is subject to revision.
+**Fansly:** "Fansly" or [fansly.com](https://fansly.com/) is operated by Select Media LLC as stated on their "Contact" page. This repository and the provided content in it isn't in any way affiliated with, sponsored by, or endorsed by Select Media LLC or "Fansly".
+
+**OnlyFans:** "OnlyFans" or [onlyfans.com](https://onlyfans.com/) is operated by Fenix International Limited. This repository and the provided content in it isn't in any way affiliated with, sponsored by, or endorsed by Fenix International Limited or "OnlyFans".
+
+The developer (referred to: "prof79" in the following) of this code is not responsible for the end users actions, no unlawful activities of any kind are being encouraged. Statements and processes described in this repository only represent best practice guidance aimed at fostering an effective software usage. The repository was written purely for educational purposes, in an entirely theoretical environment. Thus, any information is presented on the condition that the developer of this code shall not be held liable in no event to you or anyone else for any direct, special, incidental, indirect or consequential damages of any kind, or any damages whatsoever, including without limitation, loss of profit, loss of use, savings or revenue, or the claims of third parties, whether the developer has advised of the possibility of such loss, however caused and on any theory of liability, arising out of or in connection with the possession, use or performance of this software. The material embodied in this repository is supplied to you "as-is" and without warranty of any kind, express, implied or otherwise, including without limitation, any warranty of fitness. This code does not bypass any paywalls & no end user information is collected during usage. Finally it is important to note that this GitHub repository is the sole branch maintained and owned by the developer and any third-party websites or entities, that might refer to or be referred from it are in no way affiliated with this downloader, either directly or indirectly. This disclaimer is preliminary and is subject to revision.
