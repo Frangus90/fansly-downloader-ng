@@ -6,6 +6,8 @@ from tkinter import filedialog
 from typing import Callable, List, Optional
 from PIL import Image
 
+from imageprocessing.presets import save_last_output_dir
+
 
 class BatchQueuePanel(ctk.CTkFrame):
     """Panel showing batch processing queue"""
@@ -284,6 +286,8 @@ class BatchQueuePanel(ctk.CTkFrame):
         if directory:
             self.output_dir = Path(directory)
             self.output_path_label.configure(text=str(self.output_dir))
+            # Save as last used output directory
+            save_last_output_dir(self.output_dir)
 
     def _refresh_item_indices(self):
         """Refresh item indices after removal"""

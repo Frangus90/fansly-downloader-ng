@@ -16,7 +16,12 @@ from gui.tools.batch_queue_panel import BatchQueuePanel
 from gui.tools import dialogs
 
 from imageprocessing import ImageProcessor, ImageTask
-from imageprocessing.presets import get_preset_aspect_ratio, get_preset_anchor, get_preset_data
+from imageprocessing.presets import (
+    get_preset_aspect_ratio,
+    get_preset_anchor,
+    get_preset_data,
+    get_last_output_dir,
+)
 
 # Try to import tkinterdnd2 for drag-and-drop support
 try:
@@ -40,7 +45,12 @@ class ImageCropWindow(ctk.CTkToplevel):
         if default_output_dir:
             self.output_dir = default_output_dir
         else:
-            self.output_dir = Path.cwd() / "Downloads" / "processed"
+            # Try to load last used output directory
+            last_dir = get_last_output_dir()
+            if last_dir:
+                self.output_dir = last_dir
+            else:
+                self.output_dir = Path.cwd() / "Downloads" / "processed"
 
         # Ensure output directory exists
         self.output_dir.mkdir(parents=True, exist_ok=True)

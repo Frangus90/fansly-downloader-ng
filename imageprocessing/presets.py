@@ -4,8 +4,9 @@ import json
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 
-# Presets file location (next to the main script)
-PRESETS_FILE = Path(__file__).parent.parent / "crop_presets.json"
+# Presets file location (in current working directory where exe runs)
+PRESETS_FILE = Path.cwd() / "crop_presets.json"
+SETTINGS_FILE = Path.cwd() / "crop_settings.json"
 
 # Preset data structure: can be float (legacy) or dict with 'aspect_ratio' and 'anchor'
 PresetData = Union[float, Dict[str, Union[float, str]]]
@@ -215,3 +216,68 @@ def format_aspect_ratio(ratio: float) -> str:
             return f"{ratio:.3f} ({common_name})"
 
     return f"{ratio:.3f}"
+
+
+def load_settings() -> Dict[str, str]:
+    """
+    Load crop tool settings from JSON file.
+
+    Returns:
+        Dictionary with settings (e.g., last_output_dir)
+    """
+    if SETTINGS_FILE.exists():
+        try:
+            with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            return {}
+    return {}
+
+
+def save_settings(settings: Dict[str, str]) -> bool:
+    """
+    Save crop tool settings to JSON file.
+
+    Args:
+        settings: Dictionary with settings to save
+
+    Returns:
+        True if saved successfully
+    """
+    try:
+        with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(settings, f, indent=2)
+        return True
+    except IOError:
+        return False
+
+
+def get_last_output_dir() -> Optional[Path]:
+    """
+    Get the last used output directory.
+
+    Returns:
+        Path to last output directory, or None if not set
+    """
+    settings = load_settings()
+    dir_str = settings.get('last_output_dir')
+    if dir_str:
+        path = Path(dir_str)
+        if path.exists() and path.is_dir():
+            return path
+    return None
+
+
+def save_last_output_dir(output_dir: Path) -> bool:
+    """
+    Save the last used output directory.
+
+    Args:
+        output_dir: Path to output directory
+
+    Returns:
+        True if saved successfully
+    """
+    settings = load_settings()
+    settings['last_output_dir'] = str(output_dir)
+    return save_settings(settings)
