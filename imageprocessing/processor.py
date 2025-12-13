@@ -199,6 +199,7 @@ class ImageProcessor:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         output_files = []
+        failed_files = []
         total = len(self.queue)
         skipped = 0
 
@@ -216,51 +217,59 @@ class ImageProcessor:
                         progress_callback(idx + 1, total, f"Skipped: {task.filepath.name}")
                     continue
 
-                # Load image
-                image = Image.open(task.filepath)
+                # Load image using context manager to ensure file handle is closed
+                with Image.open(task.filepath) as image:
+                    # Need to load image data before exiting context
+                    image.load()
 
-                # Apply crop if specified
-                if task.crop_rect:
-                    x1, y1, x2, y2 = task.crop_rect
-                    image = crop_image(image, x1, y1, x2, y2)
+                    # Apply crop if specified
+                    if task.crop_rect:
+                        x1, y1, x2, y2 = task.crop_rect
+                        image = crop_image(image, x1, y1, x2, y2)
 
-                # Apply resize if specified
-                if task.target_size:
-                    width, height = task.target_size
-                    image = resize_image(image, width, height, maintain_aspect=False)
+                    # Apply resize if specified
+                    if task.target_size:
+                        width, height = task.target_size
+                        image = resize_image(image, width, height, maintain_aspect=False)
 
-                # Apply padding if specified
-                if task.padding > 0:
-                    image = add_padding(image, task.padding)
+                    # Apply padding if specified
+                    if task.padding > 0:
+                        image = add_padding(image, task.padding)
 
-                # Generate output path (with overwrite option)
-                output_path = self._generate_output_path(
-                    task.filepath,
-                    output_dir,
-                    task.format,
-                    overwrite=overwrite
-                )
+                    # Generate output path (with overwrite option)
+                    output_path = self._generate_output_path(
+                        task.filepath,
+                        output_dir,
+                        task.format,
+                        overwrite=overwrite
+                    )
 
-                # Save with optional file size compression
-                compression_target = task.target_file_size_mb if task.enable_size_compression else None
-                save_image(
-                    image, output_path, task.format, task.quality,
-                    compression_target, source_filepath=task.filepath
-                )
-                output_files.append(output_path)
+                    # Save with optional file size compression
+                    compression_target = task.target_file_size_mb if task.enable_size_compression else None
+                    save_image(
+                        image, output_path, task.format, task.quality,
+                        compression_target, source_filepath=task.filepath
+                    )
+                    output_files.append(output_path)
 
                 # Update progress
                 if progress_callback:
                     progress_callback(idx + 1, total, task.filepath.name)
 
             except Exception as e:
-                # Log error but continue processing other images
+                # Track failed files and continue processing others
                 error_msg = f"ERROR: {task.filepath.name} - {str(e)}"
+                failed_files.append((task.filepath, str(e)))
                 if progress_callback:
                     progress_callback(idx + 1, total, error_msg)
                 continue
 
-        return output_files
+        # Return dict with results so caller knows about failures
+        return {
+            'success': output_files,
+            'failed': failed_files,
+            'skipped': skipped
+        }
 
     def process_single(
         self,
@@ -278,30 +287,32 @@ class ImageProcessor:
             True if successful, False otherwise
         """
         try:
-            # Load image
-            image = Image.open(task.filepath)
+            # Load image using context manager to ensure file handle is closed
+            with Image.open(task.filepath) as image:
+                # Need to load image data before exiting context
+                image.load()
 
-            # Apply crop if specified
-            if task.crop_rect:
-                x1, y1, x2, y2 = task.crop_rect
-                image = crop_image(image, x1, y1, x2, y2)
+                # Apply crop if specified
+                if task.crop_rect:
+                    x1, y1, x2, y2 = task.crop_rect
+                    image = crop_image(image, x1, y1, x2, y2)
 
-            # Apply resize if specified
-            if task.target_size:
-                width, height = task.target_size
-                image = resize_image(image, width, height, maintain_aspect=False)
+                # Apply resize if specified
+                if task.target_size:
+                    width, height = task.target_size
+                    image = resize_image(image, width, height, maintain_aspect=False)
 
-            # Apply padding if specified
-            if task.padding > 0:
-                image = add_padding(image, task.padding)
+                # Apply padding if specified
+                if task.padding > 0:
+                    image = add_padding(image, task.padding)
 
-            # Save with optional file size compression
-            compression_target = task.target_file_size_mb if task.enable_size_compression else None
-            save_image(
-                image, output_path, task.format, task.quality,
-                compression_target, source_filepath=task.filepath
-            )
-            return True
+                # Save with optional file size compression
+                compression_target = task.target_file_size_mb if task.enable_size_compression else None
+                save_image(
+                    image, output_path, task.format, task.quality,
+                    compression_target, source_filepath=task.filepath
+                )
+                return True
 
         except Exception:
             return False

@@ -638,7 +638,7 @@ class ImageCropWindow(ctk.CTkToplevel):
 
             # Process batch with overwrite/skip options
             output_dir = self.queue_panel.get_output_dir()
-            output_files = self.processor.process_batch(
+            result = self.processor.process_batch(
                 output_dir,
                 progress_callback=self._on_progress_update,
                 overwrite=self._process_overwrite,
@@ -646,10 +646,11 @@ class ImageCropWindow(ctk.CTkToplevel):
             )
 
             # Notify completion on main thread
-            self.after(0, self._on_batch_complete, output_files)
+            self.after(0, self._on_batch_complete, result)
 
         except Exception as e:
-            # Show error on main thread
+            # Reset state IMMEDIATELY, then show error on main thread
+            self.is_processing = False
             self.after(0, lambda: dialogs.show_error(self, "Processing Error", f"Error processing batch:\n{str(e)}"))
             self.after(0, self._reset_processing_state)
 
@@ -661,29 +662,53 @@ class ImageCropWindow(ctk.CTkToplevel):
         # Update UI on main thread
         self.after(0, self.queue_panel.update_progress, current, total, filename)
 
-    def _on_batch_complete(self, output_files: List[Path]):
+    def _on_batch_complete(self, result: dict):
         """Handle batch processing completion"""
         self.is_processing = False
         self.queue_panel.set_processing_state(False)
 
-        if output_files:
-            # Show success dialog
-            message = f"Successfully processed {len(output_files)} image(s)!\n\n"
-            message += f"Saved to:\n{output_files[0].parent}"
+        # Extract results from dict
+        output_files = result.get('success', [])
+        failed_files = result.get('failed', [])
+        skipped = result.get('skipped', 0)
 
-            result = dialogs.ask_yes_no(
+        if output_files:
+            # Show success dialog with details
+            message = f"Successfully processed {len(output_files)} image(s)!"
+
+            if failed_files:
+                message += f"\n{len(failed_files)} file(s) failed."
+
+            if skipped > 0:
+                message += f"\n{skipped} file(s) skipped (already exist)."
+
+            message += f"\n\nSaved to:\n{output_files[0].parent}"
+
+            open_folder = dialogs.ask_yes_no(
                 self,
                 "Batch Processing Complete",
                 message + "\n\nOpen output folder?"
             )
 
-            if result:
+            if open_folder:
                 self._open_folder(output_files[0].parent)
+
+        elif failed_files:
+            # All files failed
+            error_details = "\n".join([f"• {path.name}: {err}" for path, err in failed_files[:5]])
+            if len(failed_files) > 5:
+                error_details += f"\n... and {len(failed_files) - 5} more"
+
+            dialogs.show_error(
+                self,
+                "Processing Failed",
+                f"All {len(failed_files)} file(s) failed to process:\n\n{error_details}"
+            )
         else:
             dialogs.show_warning(
                 self,
                 "Processing Complete",
-                "No images were successfully processed.\n\nCheck the log for errors."
+                "No images were processed.\n\nAll files may have been skipped."
             )
 
     def _reset_processing_state(self):
