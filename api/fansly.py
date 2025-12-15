@@ -26,7 +26,6 @@ class FanslyApi(object):
                 token: str,
                 user_agent: str,
                 check_key: str,
-                #session_id: str,
                 device_id: Optional[str]=None,
                 device_id_timestamp: Optional[int]=None,
                 on_device_updated: Optional[Callable[[], Any]]=None,

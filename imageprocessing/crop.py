@@ -160,6 +160,138 @@ def calculate_dimension_for_target_size(
     return (new_width, new_height)
 
 
+def _prepare_image_for_format(image: Image.Image, format: str) -> Image.Image:
+    """Convert image mode to be compatible with target format.
+
+    Args:
+        image: PIL Image object to prepare
+        format: Output format ('JPEG' or 'WEBP')
+
+    Returns:
+        Image with appropriate mode for the format
+    """
+    if format == 'JPEG':
+        if image.mode in ('RGBA', 'LA', 'P'):
+            # JPEG doesn't support transparency - convert to RGB with white background
+            background = Image.new('RGB', image.size, 'white')
+            if image.mode == 'P':
+                image = image.convert('RGBA')
+            background.paste(image, mask=image.split()[-1] if image.mode in ('RGBA', 'LA') else None)
+            return background
+        elif image.mode != 'RGB':
+            return image.convert('RGB')
+    return image
+
+
+def _encode_at_quality(image: Image.Image, format: str, quality: int) -> int:
+    """Encode image at given quality and return size in bytes.
+
+    Args:
+        image: PIL Image object to encode
+        format: Output format ('JPEG' or 'WEBP')
+        quality: Quality value (1-100)
+
+    Returns:
+        Size of encoded image in bytes
+    """
+    buffer = BytesIO()
+    if format == 'JPEG':
+        image.save(buffer, format=format, quality=quality, optimize=True)
+    else:  # WEBP
+        image.save(buffer, format=format, quality=quality)
+    return buffer.tell()
+
+
+def _binary_search_quality(
+    image: Image.Image,
+    format: str,
+    target_bytes: int,
+    min_quality: int,
+    max_iterations: int
+) -> tuple[int, int, int]:
+    """Find optimal quality using binary search.
+
+    Args:
+        image: PIL Image object to compress
+        format: Output format ('JPEG' or 'WEBP')
+        target_bytes: Target file size in bytes
+        min_quality: Minimum quality to try (1-100)
+        max_iterations: Maximum compression attempts
+
+    Returns:
+        (best_quality, best_size, best_diff) tuple
+    """
+    low_quality = min_quality
+    high_quality = 100
+    best_quality = None
+    best_size = 0
+    best_diff = float('inf')
+
+    for iteration in range(max_iterations):
+        current_quality = (low_quality + high_quality) // 2
+        current_size = _encode_at_quality(image, format, current_quality)
+        diff_from_target = abs(target_bytes - current_size)
+
+        # Update best result if this is under/at target AND closer to target
+        if current_size <= target_bytes:
+            if best_quality is None or diff_from_target < best_diff:
+                best_quality = current_quality
+                best_size = current_size
+                best_diff = diff_from_target
+
+            # Try higher quality to get even closer
+            low_quality = current_quality + 1
+        else:
+            # Over target, try lower quality
+            high_quality = current_quality - 1
+
+        # Stop if quality range collapsed
+        if low_quality > high_quality:
+            break
+
+    # If no valid quality was found, use minimum quality
+    if best_quality is None:
+        best_quality = min_quality
+        best_size = _encode_at_quality(image, format, best_quality)
+        best_diff = abs(target_bytes - best_size)
+
+    return (best_quality, best_size, best_diff)
+
+
+def _fine_tune_quality(
+    image: Image.Image,
+    format: str,
+    best_quality: int,
+    best_size: int,
+    best_diff: int,
+    target_bytes: int
+) -> tuple[int, int]:
+    """Fine-tune quality by trying slightly higher values.
+
+    Args:
+        image: PIL Image object to compress
+        format: Output format ('JPEG' or 'WEBP')
+        best_quality: Current best quality
+        best_size: Current best size in bytes
+        best_diff: Current best diff from target
+        target_bytes: Target file size in bytes
+
+    Returns:
+        (final_quality, final_size) tuple
+    """
+    for test_quality in range(best_quality + 1, min(best_quality + 4, 101)):
+        test_size = _encode_at_quality(image, format, test_quality)
+        test_diff = abs(target_bytes - test_size)
+
+        # If this quality is still under/at target and closer, use it
+        if test_size <= target_bytes and test_diff < best_diff:
+            best_quality = test_quality
+            best_size = test_size
+            best_diff = test_diff
+
+    return (best_quality, best_size)
+
+
 def compress_to_target_size(
     image: Image.Image,
     filepath: Path,
@@ -206,16 +338,8 @@ def compress_to_target_size(
     target_size_mb = max(MIN_TARGET_SIZE_MB, min(MAX_TARGET_SIZE_MB, target_size_mb))
     target_size_bytes = int(target_size_mb * 1024 * 1024)
 
-    # Prepare image for format (convert mode if needed)
-    if format == 'JPEG':
-        if image.mode in ('RGBA', 'LA', 'P'):
-            background = Image.new('RGB', image.size, 'white')
-            if image.mode == 'P':
-                image = image.convert('RGBA')
-            background.paste(image, mask=image.split()[-1] if image.mode in ('RGBA', 'LA') else None)
-            image = background
-        elif image.mode != 'RGB':
-            image = image.convert('RGB')
+    # Prepare image for format
+    image = _prepare_image_for_format(image, format)
 
     # Early check: Is image already under target size?
     # Use source file size if available (instant), otherwise encode at q=100
@@ -233,12 +357,7 @@ def compress_to_target_size(
 
     if current_size_bytes is None:
         # Encode at quality=100 to check size
-        buffer = BytesIO()
-        if format == 'JPEG':
-            image.save(buffer, format=format, quality=100, optimize=True)
-        else:
-            image.save(buffer, format=format, quality=100)
-        current_size_bytes = buffer.tell()
+        current_size_bytes = _encode_at_quality(image, format, 100)
 
     # If already under target, save at max quality and return early
     if current_size_bytes <= target_size_bytes:
@@ -260,69 +379,14 @@ def compress_to_target_size(
         }
 
     # Binary search for optimal quality
-    low_quality = min_quality
-    high_quality = 100
-    best_quality = None
-    best_size = 0
-    best_diff = float('inf')
+    best_quality, best_size, best_diff = _binary_search_quality(
+        image, format, target_size_bytes, min_quality, max_iterations
+    )
 
-    for iteration in range(max_iterations):
-        current_quality = (low_quality + high_quality) // 2
-
-        # Test compression to BytesIO
-        buffer = BytesIO()
-        if format == 'JPEG':
-            image.save(buffer, format=format, quality=current_quality, optimize=True)
-        else:  # WEBP
-            image.save(buffer, format=format, quality=current_quality)
-
-        current_size = buffer.tell()
-        diff_from_target = abs(target_size_bytes - current_size)
-
-        # Update best result if this is under/at target AND closer to target
-        if current_size <= target_size_bytes:
-            if best_quality is None or diff_from_target < best_diff:
-                best_quality = current_quality
-                best_size = current_size
-                best_diff = diff_from_target
-
-            # Try higher quality to get even closer
-            low_quality = current_quality + 1
-        else:
-            # Over target, try lower quality
-            high_quality = current_quality - 1
-
-        # Stop if quality range collapsed
-        if low_quality > high_quality:
-            break
-
-    # If no valid quality was found, use minimum quality
-    if best_quality is None:
-        best_quality = min_quality
-        buffer = BytesIO()
-        if format == 'JPEG':
-            image.save(buffer, format=format, quality=best_quality, optimize=True)
-        else:
-            image.save(buffer, format=format, quality=best_quality)
-        best_size = buffer.tell()
-
-    # After binary search, try a few higher quality values to see if we can get closer
-    # without going over (fine-tuning)
-    for test_quality in range(best_quality + 1, min(best_quality + 4, 101)):
-        buffer = BytesIO()
-        if format == 'JPEG':
-            image.save(buffer, format=format, quality=test_quality, optimize=True)
-        else:
-            image.save(buffer, format=format, quality=test_quality)
-
-        test_size = buffer.tell()
-        test_diff = abs(target_size_bytes - test_size)
-
-        # If this quality is still under/at target and closer, use it
-        if test_size <= target_size_bytes and test_diff < best_diff:
-            best_quality = test_quality
-            best_size = test_size
-            best_diff = test_diff
+    # Fine-tune quality by trying slightly higher values
+    best_quality, best_size = _fine_tune_quality(
+        image, format, best_quality, best_size, best_diff, target_size_bytes
+    )
 
     # Save final result
     filepath.parent.mkdir(parents=True, exist_ok=True)

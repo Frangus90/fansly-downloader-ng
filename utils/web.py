@@ -4,6 +4,8 @@
 import platform
 import re
 import traceback
+import webbrowser
+import requests
 
 from collections import OrderedDict, namedtuple
 from urllib.parse import urlparse, parse_qs
@@ -125,7 +127,6 @@ def open_url(url_to_open: str) -> None:
     sleep(10)
 
     try:
-        import webbrowser
         webbrowser.open(url_to_open, new=0, autoraise=True)
 
     except Exception:
@@ -155,8 +156,6 @@ def guess_check_key(
     :return: The check key string if found or None otherwise.
     :rtype: Optional[str]
     """
-    import requests
-
     fansly_url = 'https://fansly.com'
 
     headers = {

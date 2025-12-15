@@ -191,8 +191,6 @@ def load_config(config: FanslyConfig) -> None:
 
         other_section = 'Other'
 
-        # I obsoleted this ...
-        #config.current_version = config.parser.get('Other', 'version') # str
         if config._parser.has_option(other_section, 'version'):
             config._parser.remove_option(other_section, 'version')
 

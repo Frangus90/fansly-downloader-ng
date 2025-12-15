@@ -218,6 +218,53 @@ class ImageCropWindow(ctk.CTkToplevel):
         )
         self.queue_panel.grid(row=0, column=2, sticky="nsew", padx=(5, 0))
 
+    def _calculate_crop_dimensions(self, img_w: int, img_h: int, ratio: float) -> tuple[int, int]:
+        """Calculate largest crop box with given aspect ratio that fits image.
+
+        Args:
+            img_w: Image width in pixels
+            img_h: Image height in pixels
+            ratio: Desired aspect ratio (width / height)
+
+        Returns:
+            (crop_w, crop_h) tuple with crop box dimensions
+        """
+        if ratio > img_w / img_h:
+            # Image is taller than target ratio - crop height
+            return img_w, int(img_w / ratio)
+        else:
+            # Image is wider than target ratio - crop width
+            return int(img_h * ratio), img_h
+
+    def _calculate_anchor_position(
+        self,
+        img_w: int,
+        img_h: int,
+        crop_w: int,
+        crop_h: int,
+        anchor: str
+    ) -> tuple[int, int]:
+        """Calculate crop box position based on anchor point.
+
+        Args:
+            img_w: Image width in pixels
+            img_h: Image height in pixels
+            crop_w: Crop box width
+            crop_h: Crop box height
+            anchor: Anchor position ("Center", "Top", "Bottom", "Left", "Right")
+
+        Returns:
+            (x1, y1) tuple with top-left corner coordinates
+        """
+        anchor_positions = {
+            "Center": ((img_w - crop_w) // 2, (img_h - crop_h) // 2),
+            "Top": ((img_w - crop_w) // 2, 0),
+            "Bottom": ((img_w - crop_w) // 2, img_h - crop_h),
+            "Left": (0, (img_h - crop_h) // 2),
+            "Right": (img_w - crop_w, (img_h - crop_h) // 2),
+        }
+        return anchor_positions.get(anchor, anchor_positions["Center"])
+
     def _on_crop_changed(self, aspect_ratio: float):
         """Handle crop box changes - update aspect ratio display"""
         self.settings_panel.update_current_aspect_ratio(aspect_ratio)
@@ -359,37 +406,9 @@ class ImageCropWindow(ctk.CTkToplevel):
             with Image.open(filepath) as img:
                 img_w, img_h = img.size
 
-            # Calculate largest crop box with this aspect ratio that fits
-            if ratio > img_w / img_h:
-                # Image is taller than target ratio - crop height
-                crop_w = img_w
-                crop_h = int(img_w / ratio)
-            else:
-                # Image is wider than target ratio - crop width
-                crop_h = img_h
-                crop_w = int(img_h * ratio)
-
-            # Position crop box based on anchor
-            if anchor == "Center":
-                x1 = (img_w - crop_w) // 2
-                y1 = (img_h - crop_h) // 2
-            elif anchor == "Top":
-                x1 = (img_w - crop_w) // 2
-                y1 = 0
-            elif anchor == "Bottom":
-                x1 = (img_w - crop_w) // 2
-                y1 = img_h - crop_h
-            elif anchor == "Left":
-                x1 = 0
-                y1 = (img_h - crop_h) // 2
-            elif anchor == "Right":
-                x1 = img_w - crop_w
-                y1 = (img_h - crop_h) // 2
-            else:
-                # Default to center
-                x1 = (img_w - crop_w) // 2
-                y1 = (img_h - crop_h) // 2
-
+            # Calculate crop dimensions and position
+            crop_w, crop_h = self._calculate_crop_dimensions(img_w, img_h, ratio)
+            x1, y1 = self._calculate_anchor_position(img_w, img_h, crop_w, crop_h, anchor)
             x2 = x1 + crop_w
             y2 = y1 + crop_h
 
@@ -435,37 +454,9 @@ class ImageCropWindow(ctk.CTkToplevel):
                 with Image.open(filepath) as img:
                     img_w, img_h = img.size
 
-                # Calculate largest crop box with this aspect ratio that fits
-                if ratio > img_w / img_h:
-                    # Image is taller than target ratio - crop height
-                    crop_w = img_w
-                    crop_h = int(img_w / ratio)
-                else:
-                    # Image is wider than target ratio - crop width
-                    crop_h = img_h
-                    crop_w = int(img_h * ratio)
-
-                # Position crop box based on anchor
-                if anchor == "Center":
-                    x1 = (img_w - crop_w) // 2
-                    y1 = (img_h - crop_h) // 2
-                elif anchor == "Top":
-                    x1 = (img_w - crop_w) // 2
-                    y1 = 0
-                elif anchor == "Bottom":
-                    x1 = (img_w - crop_w) // 2
-                    y1 = img_h - crop_h
-                elif anchor == "Left":
-                    x1 = 0
-                    y1 = (img_h - crop_h) // 2
-                elif anchor == "Right":
-                    x1 = img_w - crop_w
-                    y1 = (img_h - crop_h) // 2
-                else:
-                    # Default to center
-                    x1 = (img_w - crop_w) // 2
-                    y1 = (img_h - crop_h) // 2
-
+                # Calculate crop dimensions and position
+                crop_w, crop_h = self._calculate_crop_dimensions(img_w, img_h, ratio)
+                x1, y1 = self._calculate_anchor_position(img_w, img_h, crop_w, crop_h, anchor)
                 x2 = x1 + crop_w
                 y2 = y1 + crop_h
 
