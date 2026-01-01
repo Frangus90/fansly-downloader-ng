@@ -19,6 +19,12 @@ class ImageTask:
     padding: int = 0
     target_file_size_mb: Optional[float] = None  # Target file size in MB
     enable_size_compression: bool = False  # Enable file size compression
+    # Advanced compression options
+    min_compression_quality: int = 75  # Minimum quality floor for compression
+    progressive_jpeg: bool = False  # Enable progressive JPEG encoding
+    chroma_subsampling: int = 2  # 0=4:4:4, 1=4:2:2, 2=4:2:0
+    use_mozjpeg: bool = False  # Apply MozJPEG lossless optimization
+    ssim_threshold: Optional[float] = None  # SSIM quality validation threshold
 
     def __post_init__(self):
         """Validate task parameters"""
@@ -36,6 +42,12 @@ class ImageTask:
 
         if self.padding < 0:
             raise ValueError(f"Padding must be >= 0, got {self.padding}")
+
+        if not 1 <= self.min_compression_quality <= 100:
+            raise ValueError(f"min_compression_quality must be 1-100, got {self.min_compression_quality}")
+
+        if self.chroma_subsampling not in (0, 1, 2):
+            raise ValueError(f"chroma_subsampling must be 0, 1, or 2, got {self.chroma_subsampling}")
 
 
 class ImageProcessor:
@@ -249,9 +261,17 @@ class ImageProcessor:
                     # Only use source file size optimization if no crop was applied
                     # (cropped images need their actual size checked, not original)
                     source_for_compression = task.filepath if not task.crop_rect else None
+                    # Keep original for SSIM comparison if threshold is set
+                    original_for_ssim = image.copy() if task.ssim_threshold else None
                     save_image(
                         image, output_path, task.format, task.quality,
-                        compression_target, source_filepath=source_for_compression
+                        compression_target, source_filepath=source_for_compression,
+                        min_quality=task.min_compression_quality,
+                        progressive=task.progressive_jpeg,
+                        subsampling=task.chroma_subsampling,
+                        use_mozjpeg=task.use_mozjpeg,
+                        ssim_threshold=task.ssim_threshold,
+                        original_for_ssim=original_for_ssim
                     )
                     output_files.append(output_path)
 
@@ -313,9 +333,17 @@ class ImageProcessor:
                 compression_target = task.target_file_size_mb if task.enable_size_compression else None
                 # Only use source file size optimization if no crop was applied
                 source_for_compression = task.filepath if not task.crop_rect else None
+                # Keep original for SSIM comparison if threshold is set
+                original_for_ssim = image.copy() if task.ssim_threshold else None
                 save_image(
                     image, output_path, task.format, task.quality,
-                    compression_target, source_filepath=source_for_compression
+                    compression_target, source_filepath=source_for_compression,
+                    min_quality=task.min_compression_quality,
+                    progressive=task.progressive_jpeg,
+                    subsampling=task.chroma_subsampling,
+                    use_mozjpeg=task.use_mozjpeg,
+                    ssim_threshold=task.ssim_threshold,
+                    original_for_ssim=original_for_ssim
                 )
                 return True
 

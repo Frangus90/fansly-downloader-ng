@@ -12,6 +12,7 @@ from PIL import Image
 
 from gui.tools.crop_settings_panel import CropSettingsPanel
 from gui.tools.crop_canvas import CropCanvas
+from gui.tools.compare_slider_canvas import CompareSliderCanvas
 from gui.tools.batch_queue_panel import BatchQueuePanel
 from gui.tools import dialogs
 
@@ -62,6 +63,10 @@ class ImageCropWindow(ctk.CTkToplevel):
         self.is_processing = False
         self.image_crop_settings = {}  # Maps index -> {'crop_rect': (x1,y1,x2,y2), 'aspect_ratio': float}
 
+        # Compression preview state
+        self._compression_preview_timer = None
+        self._compression_preview_cancel_event = threading.Event()
+
         # Build UI
         self._build_ui()
 
@@ -81,6 +86,23 @@ class ImageCropWindow(ctk.CTkToplevel):
         self.attributes('-topmost', True)
         self.focus_force()
         # Keep topmost - no use case for downloader window to be on top while cropping
+
+    def destroy(self):
+        """Override destroy to clean up background operations"""
+        # Cancel any pending compression preview timer
+        if self._compression_preview_timer is not None:
+            try:
+                self.after_cancel(self._compression_preview_timer)
+            except Exception:
+                pass
+            self._compression_preview_timer = None
+
+        # Signal any running preview threads to stop
+        if hasattr(self, '_compression_preview_cancel_event'):
+            self._compression_preview_cancel_event.set()
+
+        # Call parent destroy
+        super().destroy()
 
     def _setup_drag_drop(self):
         """Setup drag and drop support for adding images"""
@@ -200,9 +222,27 @@ class ImageCropWindow(ctk.CTkToplevel):
         )
         self.settings_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
 
-        # Center panel: Canvas
-        self.crop_canvas = CropCanvas(main_frame)
-        self.crop_canvas.grid(row=0, column=1, sticky="nsew", padx=5)
+        # Center panel: Tabbed preview area
+        self.preview_tabview = ctk.CTkTabview(main_frame)
+        self.preview_tabview.grid(row=0, column=1, sticky="nsew", padx=5)
+
+        # Add tabs
+        self.preview_tabview.add("Crop Preview")
+        self.preview_tabview.add("Compress Preview")
+
+        # Crop canvas in first tab
+        self.crop_canvas = CropCanvas(self.preview_tabview.tab("Crop Preview"))
+        self.crop_canvas.pack(fill="both", expand=True)
+
+        # Compare canvas in second tab
+        self.compare_canvas = CompareSliderCanvas(
+            self.preview_tabview.tab("Compress Preview"),
+            on_request_comparison=self._on_request_comparison
+        )
+        self.compare_canvas.pack(fill="both", expand=True)
+
+        # Tab change handler
+        self.preview_tabview.configure(command=self._on_tab_changed)
 
         # Set up callbacks
         self.crop_canvas.set_nav_callback(self._on_navigate)
@@ -268,6 +308,8 @@ class ImageCropWindow(ctk.CTkToplevel):
     def _on_crop_changed(self, aspect_ratio: float):
         """Handle crop box changes - update aspect ratio display"""
         self.settings_panel.update_current_aspect_ratio(aspect_ratio)
+        # Schedule compression preview update
+        self._schedule_compression_preview()
 
     def _on_images_uploaded(self, filepaths: List[Path]):
         """Handle images being uploaded"""
@@ -325,6 +367,13 @@ class ImageCropWindow(ctk.CTkToplevel):
 
             # Update counter
             self.crop_canvas.update_image_counter(index, len(self.loaded_images))
+
+            # Schedule compression preview update
+            self._schedule_compression_preview()
+
+            # Also update comparison if on Compress Preview tab
+            if self.preview_tabview.get() == "Compress Preview":
+                self._generate_compression_comparison()
 
     def _on_queue_item_selected(self, index: int):
         """Handle queue item selection"""
@@ -394,6 +443,9 @@ class ImageCropWindow(ctk.CTkToplevel):
         else:
             # Lock is OFF - clear aspect ratio
             self.crop_canvas.set_aspect_ratio(None)
+
+        # Schedule compression preview update
+        self._schedule_compression_preview()
 
     def _apply_aspect_ratio_to_current_image(self, ratio: float, anchor: str):
         """Apply aspect ratio and anchor to the current image only"""
@@ -642,7 +694,13 @@ class ImageCropWindow(ctk.CTkToplevel):
                     format=settings['format'],
                     quality=settings['quality'],
                     target_file_size_mb=target_size_mb,
-                    enable_size_compression=enable_compression
+                    enable_size_compression=enable_compression,
+                    # Advanced compression options
+                    min_compression_quality=settings.get('min_quality', 75),
+                    progressive_jpeg=settings.get('progressive', False),
+                    chroma_subsampling=settings.get('chroma_subsampling', 2),
+                    use_mozjpeg=settings.get('use_mozjpeg', False),
+                    ssim_threshold=settings.get('ssim_threshold'),
                 )
                 self.processor.add_to_queue(task)
 
@@ -738,3 +796,198 @@ class ImageCropWindow(ctk.CTkToplevel):
                 subprocess.run(["xdg-open", str(folder)], check=False)
         except Exception as e:
             print(f"Error opening folder: {e}")
+
+    # Compression Preview Methods
+    def _schedule_compression_preview(self):
+        """Schedule compression preview with 300ms debounce"""
+        # Cancel any pending preview
+        if self._compression_preview_timer is not None:
+            self.after_cancel(self._compression_preview_timer)
+
+        # Schedule new preview after 300ms
+        self._compression_preview_timer = self.after(300, self._start_compression_preview)
+
+    def _start_compression_preview(self):
+        """Start compression preview in background thread"""
+        self._compression_preview_timer = None
+
+        # Cancel any existing preview computation
+        if hasattr(self, '_compression_preview_cancel_event'):
+            self._compression_preview_cancel_event.set()
+
+        # Create new cancel event
+        cancel_event = threading.Event()
+        self._compression_preview_cancel_event = cancel_event
+
+        # Show computing state
+        self.settings_panel.update_estimated_file_size(None, is_computing=True)
+
+        # Start background computation
+        thread = threading.Thread(
+            target=self._compute_compression_preview,
+            args=(cancel_event,),
+            daemon=True
+        )
+        thread.start()
+
+    def _compute_compression_preview(self, cancel_event):
+        """Compute estimated file size in background thread
+
+        Args:
+            cancel_event: Threading event to signal cancellation
+        """
+        try:
+            # Check if we have an image
+            if self.current_image_index < 0 or not self.loaded_images:
+                self.after(0, self.settings_panel.update_estimated_file_size, None, False)
+                return
+
+            if cancel_event.is_set():
+                return
+
+            # Get current image and settings
+            filepath = self.loaded_images[self.current_image_index]
+            settings = self.settings_panel.get_settings()
+            crop_coords = self.crop_canvas.get_crop_coordinates()
+
+            if cancel_event.is_set():
+                return
+
+            # Load and process image
+            from imageprocessing.crop import _encode_at_quality, crop_image
+
+            img = Image.open(filepath)
+
+            # Apply crop if exists
+            if crop_coords and crop_coords != (0, 0, img.width, img.height):
+                img = crop_image(img, *crop_coords)
+
+            if cancel_event.is_set():
+                img.close()
+                return
+
+            # Get encoding settings
+            format_val = settings['format']
+            quality = settings['quality']
+            progressive = settings.get('progressive', False)
+            chroma = settings.get('chroma_subsampling', 2)
+            use_mozjpeg = settings.get('use_mozjpeg', False)
+
+            # Encode and get size
+            _, size_bytes = _encode_at_quality(
+                img,
+                format_val,
+                quality,
+                progressive,
+                chroma,
+                use_mozjpeg
+            )
+
+            img.close()
+
+            if cancel_event.is_set():
+                return
+
+            # Update UI on main thread
+            self.after(0, self.settings_panel.update_estimated_file_size, size_bytes, False)
+
+        except Exception as e:
+            # On error, reset to "--"
+            if not cancel_event.is_set():
+                self.after(0, self.settings_panel.update_estimated_file_size, None, False)
+
+    # Comparison Tab Methods
+    def _on_tab_changed(self):
+        """Handle tab change - generate comparison when switching to Compress Preview"""
+        current_tab = self.preview_tabview.get()
+        if current_tab == "Compress Preview":
+            self._generate_compression_comparison()
+
+    def _on_request_comparison(self):
+        """Handle refresh button click from compare canvas"""
+        self._generate_compression_comparison()
+
+    def _generate_compression_comparison(self):
+        """Generate compression comparison in background thread"""
+        if self.current_image_index < 0 or not self.loaded_images:
+            self.compare_canvas.clear()
+            return
+
+        # Start background thread
+        thread = threading.Thread(
+            target=self._generate_comparison_thread,
+            daemon=True
+        )
+        thread.start()
+
+    def _generate_comparison_thread(self):
+        """Background worker: encode both versions and calculate SSIM"""
+        try:
+            from imageprocessing.crop import _encode_at_quality, crop_image
+            from imageprocessing.encoders import calculate_ssim, SSIM_AVAILABLE
+            from io import BytesIO
+
+            # Get current image
+            filepath = self.loaded_images[self.current_image_index]
+            settings = self.settings_panel.get_settings()
+            crop_coords = self.crop_canvas.get_crop_coordinates()
+
+            # Load image
+            img = Image.open(filepath)
+
+            # Apply crop if exists
+            if crop_coords and crop_coords != (0, 0, img.width, img.height):
+                img = crop_image(img, *crop_coords)
+
+            original_img = img.copy()
+
+            # Get settings
+            format_val = settings['format']
+            quality = settings['quality']
+            progressive = settings.get('progressive', False)
+            chroma = settings.get('chroma_subsampling', 2)
+            use_mozjpeg = settings.get('use_mozjpeg', False)
+
+            # Check if format is lossless
+            is_lossless = format_val == 'PNG'
+
+            # Encode original at quality 100
+            original_bytes, original_size = _encode_at_quality(
+                img, format_val, 100, False, 0, False
+            )
+
+            # Encode compressed with current settings
+            compressed_bytes, compressed_size = _encode_at_quality(
+                img, format_val, quality, progressive, chroma, use_mozjpeg
+            )
+
+            img.close()
+
+            # Load compressed image for display and SSIM
+            compressed_img = Image.open(BytesIO(compressed_bytes))
+
+            # Calculate SSIM if available
+            ssim_score = None
+            if SSIM_AVAILABLE:
+                try:
+                    ssim_score = calculate_ssim(original_img, compressed_img)
+                except Exception:
+                    pass
+
+            # Update UI on main thread
+            self.after(0, self._update_comparison_display,
+                       original_img, compressed_img,
+                       original_size, compressed_size, ssim_score, is_lossless)
+
+        except Exception as e:
+            print(f"Error generating comparison: {e}")
+            self.after(0, self.compare_canvas.clear)
+
+    def _update_comparison_display(self, original_img, compressed_img,
+                                    original_size, compressed_size, ssim_score,
+                                    is_lossless=False):
+        """Update comparison canvas on main thread"""
+        self.compare_canvas.set_images(
+            original_img, compressed_img,
+            original_size, compressed_size, ssim_score, is_lossless
+        )

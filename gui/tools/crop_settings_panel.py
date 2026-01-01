@@ -46,7 +46,7 @@ class CropSettingsPanel(ctk.CTkFrame):
 
     def _build_ui(self):
         """Build the settings panel UI"""
-        # Title
+        # Title (outside scrollable area so it stays fixed)
         title = ctk.CTkLabel(
             self,
             text="Crop Settings",
@@ -54,6 +54,15 @@ class CropSettingsPanel(ctk.CTkFrame):
             anchor="w"
         )
         title.pack(padx=15, pady=(15, 10), anchor="w")
+
+        # Scrollable container for all settings
+        self.scroll_container = ctk.CTkScrollableFrame(
+            self,
+            fg_color="transparent",
+            scrollbar_button_color="#3b3b3b",
+            scrollbar_button_hover_color="#4a4a4a"
+        )
+        self.scroll_container.pack(fill="both", expand=True, padx=0, pady=0)
 
         # Upload section
         self._build_upload_section()
@@ -67,9 +76,12 @@ class CropSettingsPanel(ctk.CTkFrame):
         # Format section
         self._build_format_section()
 
+        # Advanced compression options (collapsible)
+        self._build_advanced_options_section()
+
     def _build_upload_section(self):
         """Build upload button section"""
-        section = ctk.CTkFrame(self)
+        section = ctk.CTkFrame(self.scroll_container)
         section.pack(fill="x", padx=10, pady=5)
 
         label = ctk.CTkLabel(
@@ -99,7 +111,7 @@ class CropSettingsPanel(ctk.CTkFrame):
 
     def _build_preset_section(self):
         """Build preset selection section with save/delete"""
-        section = ctk.CTkFrame(self)
+        section = ctk.CTkFrame(self.scroll_container)
         section.pack(fill="x", padx=10, pady=5)
 
         label = ctk.CTkLabel(
@@ -169,7 +181,7 @@ class CropSettingsPanel(ctk.CTkFrame):
 
     def _build_aspect_ratio_section(self):
         """Build aspect ratio controls section"""
-        section = ctk.CTkFrame(self)
+        section = ctk.CTkFrame(self.scroll_container)
         section.pack(fill="x", padx=10, pady=5)
 
         label = ctk.CTkLabel(
@@ -256,7 +268,7 @@ class CropSettingsPanel(ctk.CTkFrame):
 
     def _build_format_section(self):
         """Build format and quality section"""
-        section = ctk.CTkFrame(self)
+        section = ctk.CTkFrame(self.scroll_container)
         section.pack(fill="x", padx=10, pady=5)
 
         label = ctk.CTkLabel(
@@ -324,17 +336,26 @@ class CropSettingsPanel(ctk.CTkFrame):
             font=("Arial", 10),
             text_color="gray60"
         )
-        self.quality_value_label.pack(padx=10, pady=(0, 10))
+        self.quality_value_label.pack(padx=10, pady=(0, 5))
 
         # Bind quality slider to update label
         self.quality_var.trace_add('write', self._update_quality_label)
+
+        # Estimated file size label
+        self.estimated_size_label = ctk.CTkLabel(
+            section,
+            text="Estimated size: --",
+            font=("Arial", 10),
+            text_color="gray60"
+        )
+        self.estimated_size_label.pack(padx=10, pady=(0, 10))
 
         # File size compression section
         self._build_compression_section()
 
     def _build_compression_section(self):
         """Build file size compression controls"""
-        self.compression_section = ctk.CTkFrame(self)
+        self.compression_section = ctk.CTkFrame(self.scroll_container)
         self.compression_section.pack(fill="x", padx=10, pady=5)
 
         label = ctk.CTkLabel(
@@ -431,6 +452,183 @@ class CropSettingsPanel(ctk.CTkFrame):
         # Initial state - compression controls enabled (default is crop_and_compress)
         self._update_compression_visibility()
         self._on_format_changed()  # Sync quality label with initial mode
+
+    def _build_advanced_options_section(self):
+        """Build advanced compression options (collapsible section)"""
+        # Import encoder capabilities
+        try:
+            from imageprocessing.encoders import get_encoder_capabilities, CHROMA_LABELS
+            capabilities = get_encoder_capabilities()
+        except ImportError:
+            capabilities = {'ssim_validation': False, 'mozjpeg_optimization': False}
+            CHROMA_LABELS = {0: "Best Quality (4:4:4)", 1: "Balanced (4:2:2)", 2: "Smallest (4:2:0)"}
+
+        # Main frame for advanced options
+        self.advanced_section = ctk.CTkFrame(self.scroll_container)
+        self.advanced_section.pack(fill="x", padx=10, pady=(5, 15))
+
+        # Header with expand/collapse button
+        header_frame = ctk.CTkFrame(self.advanced_section, fg_color="transparent")
+        header_frame.pack(fill="x", padx=10, pady=(10, 5))
+
+        self.advanced_expanded = ctk.BooleanVar(value=False)
+        self.expand_btn = ctk.CTkButton(
+            header_frame,
+            text="Advanced Options \u25bc",
+            command=self._toggle_advanced_options,
+            width=180,
+            height=28,
+            fg_color="transparent",
+            text_color=("gray20", "gray80"),
+            hover_color=("gray80", "gray30")
+        )
+        self.expand_btn.pack(anchor="w")
+
+        # Content frame (hidden by default)
+        self.advanced_content = ctk.CTkFrame(self.advanced_section, fg_color="transparent")
+
+        # 1. Quality Floor slider
+        quality_floor_label = ctk.CTkLabel(
+            self.advanced_content,
+            text="Minimum Quality:",
+            anchor="w"
+        )
+        quality_floor_label.pack(padx=10, pady=(10, 0), anchor="w")
+
+        self.min_quality_var = ctk.IntVar(value=75)
+        self.min_quality_slider = ctk.CTkSlider(
+            self.advanced_content,
+            from_=60,
+            to=90,
+            number_of_steps=30,
+            variable=self.min_quality_var,
+            command=self._on_settings_changed
+        )
+        self.min_quality_slider.pack(padx=10, pady=2, fill="x")
+
+        self.min_quality_label = ctk.CTkLabel(
+            self.advanced_content,
+            text="75 (prevents over-compression)",
+            font=("Arial", 9),
+            text_color="gray60"
+        )
+        self.min_quality_label.pack(padx=10, pady=(0, 5), anchor="w")
+        self.min_quality_var.trace_add('write', self._update_min_quality_label)
+
+        # 2. Chroma Subsampling dropdown
+        chroma_label = ctk.CTkLabel(
+            self.advanced_content,
+            text="Chroma Subsampling:",
+            anchor="w"
+        )
+        chroma_label.pack(padx=10, pady=(10, 0), anchor="w")
+
+        self.chroma_var = ctk.StringVar(value=CHROMA_LABELS[2])
+        self.chroma_dropdown = ctk.CTkOptionMenu(
+            self.advanced_content,
+            variable=self.chroma_var,
+            values=[CHROMA_LABELS[0], CHROMA_LABELS[1], CHROMA_LABELS[2]],
+            command=self._on_settings_changed,
+            width=180
+        )
+        self.chroma_dropdown.pack(padx=10, pady=5, anchor="w")
+
+        chroma_info = ctk.CTkLabel(
+            self.advanced_content,
+            text="4:4:4 = best color, larger files",
+            font=("Arial", 9),
+            text_color="gray60"
+        )
+        chroma_info.pack(padx=10, pady=(0, 5), anchor="w")
+
+        # 3. Progressive JPEG checkbox
+        self.progressive_var = ctk.BooleanVar(value=False)
+        self.progressive_check = ctk.CTkCheckBox(
+            self.advanced_content,
+            text="Progressive JPEG",
+            variable=self.progressive_var,
+            command=self._on_settings_changed
+        )
+        self.progressive_check.pack(padx=10, pady=5, anchor="w")
+
+        # 4. MozJPEG optimization checkbox
+        self.mozjpeg_var = ctk.BooleanVar(value=False)
+        self.mozjpeg_check = ctk.CTkCheckBox(
+            self.advanced_content,
+            text="MozJPEG optimization",
+            variable=self.mozjpeg_var,
+            command=self._on_settings_changed
+        )
+        self.mozjpeg_check.pack(padx=10, pady=5, anchor="w")
+
+        if not capabilities['mozjpeg_optimization']:
+            self.mozjpeg_check.configure(state="disabled")
+            mozjpeg_status = ctk.CTkLabel(
+                self.advanced_content,
+                text="pip install mozjpeg-lossless-optimization",
+                font=("Arial", 8),
+                text_color="gray50"
+            )
+            mozjpeg_status.pack(padx=25, anchor="w")
+
+        # 5. SSIM validation checkbox + threshold
+        ssim_frame = ctk.CTkFrame(self.advanced_content, fg_color="transparent")
+        ssim_frame.pack(fill="x", padx=10, pady=5)
+
+        self.ssim_var = ctk.BooleanVar(value=False)
+        self.ssim_check = ctk.CTkCheckBox(
+            ssim_frame,
+            text="SSIM validation",
+            variable=self.ssim_var,
+            command=self._on_ssim_toggle
+        )
+        self.ssim_check.pack(side="left")
+
+        threshold_label = ctk.CTkLabel(ssim_frame, text="threshold:", font=("Arial", 10))
+        threshold_label.pack(side="left", padx=(10, 5))
+
+        self.ssim_threshold_var = ctk.StringVar(value="0.95")
+        self.ssim_threshold_entry = ctk.CTkEntry(
+            ssim_frame,
+            textvariable=self.ssim_threshold_var,
+            width=50
+        )
+        self.ssim_threshold_entry.pack(side="left")
+
+        if not capabilities['ssim_validation']:
+            self.ssim_check.configure(state="disabled")
+            self.ssim_threshold_entry.configure(state="disabled")
+            ssim_status = ctk.CTkLabel(
+                self.advanced_content,
+                text="pip install scikit-image",
+                font=("Arial", 8),
+                text_color="gray50"
+            )
+            ssim_status.pack(padx=25, anchor="w")
+
+    def _toggle_advanced_options(self):
+        """Toggle visibility of advanced options"""
+        if self.advanced_expanded.get():
+            self.advanced_content.pack_forget()
+            self.expand_btn.configure(text="Advanced Options \u25bc")
+            self.advanced_expanded.set(False)
+        else:
+            self.advanced_content.pack(fill="x", padx=5, pady=5)
+            self.expand_btn.configure(text="Advanced Options \u25b2")
+            self.advanced_expanded.set(True)
+
+    def _update_min_quality_label(self, *args):
+        """Update the minimum quality label when slider changes"""
+        val = self.min_quality_var.get()
+        self.min_quality_label.configure(text=f"{val} (prevents over-compression)")
+
+    def _on_ssim_toggle(self):
+        """Handle SSIM checkbox toggle"""
+        if self.ssim_var.get():
+            self.ssim_threshold_entry.configure(state="normal")
+        else:
+            self.ssim_threshold_entry.configure(state="disabled")
+        self._on_settings_changed()
 
     def _browse_images(self):
         """Open file browser to select multiple images"""
@@ -708,6 +906,23 @@ class CropSettingsPanel(ctk.CTkFrame):
         mode = self.processing_mode_var.get()
         enable_compression = mode in ('crop_and_compress', 'compress_only')
 
+        # Parse chroma subsampling from label
+        chroma_str = self.chroma_var.get()
+        if "4:4:4" in chroma_str:
+            chroma_value = 0
+        elif "4:2:2" in chroma_str:
+            chroma_value = 1
+        else:
+            chroma_value = 2
+
+        # Parse SSIM threshold
+        ssim_threshold = None
+        if self.ssim_var.get():
+            try:
+                ssim_threshold = float(self.ssim_threshold_var.get())
+            except ValueError:
+                ssim_threshold = 0.95
+
         return {
             'preset': self.preset_var.get(),
             'lock_aspect': self.lock_aspect_var.get(),
@@ -716,6 +931,12 @@ class CropSettingsPanel(ctk.CTkFrame):
             'enable_compression': enable_compression,
             'target_size_mb': target_mb,
             'processing_mode': mode,
+            # Advanced compression options
+            'min_quality': self.min_quality_var.get(),
+            'progressive': self.progressive_var.get(),
+            'chroma_subsampling': chroma_value,
+            'use_mozjpeg': self.mozjpeg_var.get(),
+            'ssim_threshold': ssim_threshold,
         }
 
     def get_current_aspect_ratio_input(self) -> Optional[float]:
@@ -744,3 +965,39 @@ class CropSettingsPanel(ctk.CTkFrame):
             One of: "Center", "Top", "Bottom", "Left", "Right"
         """
         return self.anchor_var.get()
+
+    def _format_bytes(self, size_bytes: int) -> str:
+        """Format bytes as human-readable file size.
+
+        Args:
+            size_bytes: Size in bytes
+
+        Returns:
+            Formatted string (e.g., "1.5 MB", "750 KB")
+        """
+        if size_bytes < 1024 * 1024:  # Less than 1 MB
+            return f"{size_bytes / 1024:.1f} KB"
+        else:
+            return f"{size_bytes / (1024 * 1024):.2f} MB"
+
+    def update_estimated_file_size(self, size_bytes: Optional[int], is_computing: bool = False):
+        """Update the estimated file size display.
+
+        Args:
+            size_bytes: File size in bytes, or None to show "--"
+            is_computing: If True, show "Computing..." state
+        """
+        # Check if widget still exists (window may have been closed)
+        try:
+            if not self.winfo_exists() or not self.estimated_size_label.winfo_exists():
+                return
+        except Exception:
+            return
+
+        if is_computing:
+            self.estimated_size_label.configure(text="Estimated size: Computing...")
+        elif size_bytes is None:
+            self.estimated_size_label.configure(text="Estimated size: --")
+        else:
+            formatted = self._format_bytes(size_bytes)
+            self.estimated_size_label.configure(text=f"Estimated size: {formatted}")

@@ -18,12 +18,26 @@
   - Interactive canvas with drag-and-drop support
   - Custom aspect ratio presets and alignment options
   - Multiple export formats (JPEG, PNG, WebP)
+  - **Compression Preview** - Real-time estimated file size display without actual compression
+  - **Before/After Comparison** - Side-by-side slider to compare original vs compressed quality
+    - Drag slider left/right to reveal differences
+    - Zoom in/out (scroll wheel or +/- buttons) to inspect fine details
+    - Pan when zoomed (right-click drag)
+    - SSIM quality score with color-coded indicator
+    - Smart PNG detection with lossless format warning
+- **Advanced Compression Options** - Enhanced file size compression with quality preservation
+  - **MozJPEG Optimization** - 10-15% smaller files at same quality using optimized encoding
+  - **SSIM Quality Validation** - Warns when compression reduces perceptual quality below threshold
+  - **Chroma Subsampling Control** - Choose between best quality (4:4:4), balanced (4:2:2), or smallest (4:2:0)
+  - **Configurable Quality Floor** - Set minimum quality (60-90) to prevent over-compression
+  - **Progressive JPEG** - Option for better web loading experience
 
 **Improvements:**
 - Enhanced crop tool with reactive cursors and drag-to-create functionality
 - Better resize handles and aspect ratio handling
 - Improved error handling and logging throughout
 - Enhanced output directory browsing and filename preservation
+- Removed plyvel-ci dependency for easier installation (auto-token extraction now optional)
 
 ### v0.9.9 2024-06-28
 

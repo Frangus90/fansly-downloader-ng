@@ -183,23 +183,51 @@ def _prepare_image_for_format(image: Image.Image, format: str) -> Image.Image:
     return image
 
 
-def _encode_at_quality(image: Image.Image, format: str, quality: int) -> int:
-    """Encode image at given quality and return size in bytes.
+def _encode_at_quality(
+    image: Image.Image,
+    format: str,
+    quality: int,
+    progressive: bool = False,
+    subsampling: int = 2,
+    use_mozjpeg: bool = False
+) -> tuple[bytes, int]:
+    """Encode image at given quality and return bytes and size.
 
     Args:
         image: PIL Image object to encode
-        format: Output format ('JPEG' or 'WEBP')
-        quality: Quality value (1-100)
+        format: Output format ('JPEG', 'WEBP', or 'PNG')
+        quality: Quality value (1-100) - ignored for PNG
+        progressive: Enable progressive JPEG encoding
+        subsampling: Chroma subsampling (0=4:4:4, 1=4:2:2, 2=4:2:0)
+        use_mozjpeg: Apply MozJPEG lossless optimization
 
     Returns:
-        Size of encoded image in bytes
+        Tuple of (encoded_bytes, size_in_bytes)
     """
     buffer = BytesIO()
     if format == 'JPEG':
-        image.save(buffer, format=format, quality=quality, optimize=True)
+        image.save(
+            buffer,
+            format=format,
+            quality=quality,
+            optimize=True,
+            progressive=progressive,
+            subsampling=subsampling
+        )
+    elif format == 'PNG':
+        # PNG is lossless - quality doesn't apply
+        image.save(buffer, format='PNG', optimize=True)
     else:  # WEBP
         image.save(buffer, format=format, quality=quality)
-    return buffer.tell()
+
+    encoded_bytes = buffer.getvalue()
+
+    # Apply MozJPEG optimization if available and requested
+    if use_mozjpeg and format == 'JPEG':
+        from .encoders import optimize_with_mozjpeg
+        encoded_bytes = optimize_with_mozjpeg(encoded_bytes)
+
+    return (encoded_bytes, len(encoded_bytes))
 
 
 def _binary_search_quality(
@@ -207,7 +235,10 @@ def _binary_search_quality(
     format: str,
     target_bytes: int,
     min_quality: int,
-    max_iterations: int
+    max_iterations: int,
+    progressive: bool = False,
+    subsampling: int = 2,
+    use_mozjpeg: bool = False
 ) -> tuple[int, int, int]:
     """Find optimal quality using binary search.
 
@@ -217,6 +248,9 @@ def _binary_search_quality(
         target_bytes: Target file size in bytes
         min_quality: Minimum quality to try (1-100)
         max_iterations: Maximum compression attempts
+        progressive: Enable progressive JPEG encoding
+        subsampling: Chroma subsampling (0=4:4:4, 1=4:2:2, 2=4:2:0)
+        use_mozjpeg: Apply MozJPEG lossless optimization
 
     Returns:
         (best_quality, best_size, best_diff) tuple
@@ -229,7 +263,9 @@ def _binary_search_quality(
 
     for iteration in range(max_iterations):
         current_quality = (low_quality + high_quality) // 2
-        current_size = _encode_at_quality(image, format, current_quality)
+        _, current_size = _encode_at_quality(
+            image, format, current_quality, progressive, subsampling, use_mozjpeg
+        )
         diff_from_target = abs(target_bytes - current_size)
 
         # Update best result if this is under/at target AND closer to target
@@ -252,7 +288,9 @@ def _binary_search_quality(
     # If no valid quality was found, use minimum quality
     if best_quality is None:
         best_quality = min_quality
-        best_size = _encode_at_quality(image, format, best_quality)
+        _, best_size = _encode_at_quality(
+            image, format, best_quality, progressive, subsampling, use_mozjpeg
+        )
         best_diff = abs(target_bytes - best_size)
 
     return (best_quality, best_size, best_diff)
@@ -264,7 +302,10 @@ def _fine_tune_quality(
     best_quality: int,
     best_size: int,
     best_diff: int,
-    target_bytes: int
+    target_bytes: int,
+    progressive: bool = False,
+    subsampling: int = 2,
+    use_mozjpeg: bool = False
 ) -> tuple[int, int]:
     """Fine-tune quality by trying slightly higher values.
 
@@ -275,12 +316,17 @@ def _fine_tune_quality(
         best_size: Current best size in bytes
         best_diff: Current best diff from target
         target_bytes: Target file size in bytes
+        progressive: Enable progressive JPEG encoding
+        subsampling: Chroma subsampling (0=4:4:4, 1=4:2:2, 2=4:2:0)
+        use_mozjpeg: Apply MozJPEG lossless optimization
 
     Returns:
         (final_quality, final_size) tuple
     """
     for test_quality in range(best_quality + 1, min(best_quality + 4, 101)):
-        test_size = _encode_at_quality(image, format, test_quality)
+        _, test_size = _encode_at_quality(
+            image, format, test_quality, progressive, subsampling, use_mozjpeg
+        )
         test_diff = abs(target_bytes - test_size)
 
         # If this quality is still under/at target and closer, use it
@@ -299,7 +345,12 @@ def compress_to_target_size(
     target_size_mb: float,
     min_quality: int = MIN_COMPRESSION_QUALITY,
     max_iterations: int = MAX_COMPRESSION_ITERATIONS,
-    source_filepath: Optional[Path] = None
+    source_filepath: Optional[Path] = None,
+    progressive: bool = False,
+    subsampling: int = 2,
+    use_mozjpeg: bool = False,
+    ssim_threshold: Optional[float] = None,
+    original_for_ssim: Optional[Image.Image] = None
 ) -> dict:
     """
     Compress image to target file size using binary search.
@@ -312,6 +363,11 @@ def compress_to_target_size(
         min_quality: Minimum quality to try (1-100)
         max_iterations: Maximum compression attempts
         source_filepath: Original file path (for size check optimization)
+        progressive: Enable progressive JPEG encoding
+        subsampling: Chroma subsampling (0=4:4:4, 1=4:2:2, 2=4:2:0)
+        use_mozjpeg: Apply MozJPEG lossless optimization
+        ssim_threshold: Minimum SSIM score required (0.0-1.0)
+        original_for_ssim: Original image for SSIM comparison
 
     Returns:
         dict with keys:
@@ -320,6 +376,8 @@ def compress_to_target_size(
             - 'quality_used': int - Quality value used
             - 'message': str - Status message
             - 'suggested_dimensions': Optional[Tuple[int, int]] - If target not met
+            - 'ssim_score': Optional[float] - SSIM score if validation enabled
+            - 'ssim_warning': bool - True if SSIM below threshold
     """
     import os
 
@@ -331,7 +389,9 @@ def compress_to_target_size(
             'final_size_mb': 0,
             'quality_used': 0,
             'message': f'Compression only supported for JPEG and WEBP, not {format}',
-            'suggested_dimensions': None
+            'suggested_dimensions': None,
+            'ssim_score': None,
+            'ssim_warning': False
         }
 
     # Clamp target size to valid range
@@ -357,15 +417,22 @@ def compress_to_target_size(
 
     if current_size_bytes is None:
         # Encode at quality=100 to check size
-        current_size_bytes = _encode_at_quality(image, format, 100)
+        _, current_size_bytes = _encode_at_quality(
+            image, format, 100, progressive, subsampling, use_mozjpeg
+        )
 
     # If already under target, save at max quality and return early
     if current_size_bytes <= target_size_bytes:
         filepath.parent.mkdir(parents=True, exist_ok=True)
-        if format == 'JPEG':
-            image.save(filepath, format=format, quality=100, optimize=True)
-        else:
-            image.save(filepath, format=format, quality=100)
+
+        # Get final encoded bytes (with all options)
+        encoded_bytes, _ = _encode_at_quality(
+            image, format, 100, progressive, subsampling, use_mozjpeg
+        )
+
+        # Write to file
+        with open(filepath, 'wb') as f:
+            f.write(encoded_bytes)
 
         final_size_bytes = filepath.stat().st_size
         final_size_mb = final_size_bytes / (1024 * 1024)
@@ -375,26 +442,32 @@ def compress_to_target_size(
             'final_size_mb': final_size_mb,
             'quality_used': 100,
             'message': f'Already under target ({final_size_mb:.2f} MB), saved at quality 100',
-            'suggested_dimensions': None
+            'suggested_dimensions': None,
+            'ssim_score': None,
+            'ssim_warning': False
         }
 
     # Binary search for optimal quality
     best_quality, best_size, best_diff = _binary_search_quality(
-        image, format, target_size_bytes, min_quality, max_iterations
+        image, format, target_size_bytes, min_quality, max_iterations,
+        progressive, subsampling, use_mozjpeg
     )
 
     # Fine-tune quality by trying slightly higher values
     best_quality, best_size = _fine_tune_quality(
-        image, format, best_quality, best_size, best_diff, target_size_bytes
+        image, format, best_quality, best_size, best_diff, target_size_bytes,
+        progressive, subsampling, use_mozjpeg
+    )
+
+    # Get final encoded bytes
+    encoded_bytes, _ = _encode_at_quality(
+        image, format, best_quality, progressive, subsampling, use_mozjpeg
     )
 
     # Save final result
     filepath.parent.mkdir(parents=True, exist_ok=True)
-
-    if format == 'JPEG':
-        image.save(filepath, format=format, quality=best_quality, optimize=True)
-    else:  # WEBP
-        image.save(filepath, format=format, quality=best_quality)
+    with open(filepath, 'wb') as f:
+        f.write(encoded_bytes)
 
     # Get actual file size
     final_size_bytes = filepath.stat().st_size
@@ -403,15 +476,34 @@ def compress_to_target_size(
     # Check if target was met
     success = final_size_bytes <= target_size_bytes
 
+    # SSIM validation if requested
+    ssim_score = None
+    ssim_warning = False
+
+    if ssim_threshold is not None and original_for_ssim is not None:
+        from .encoders import calculate_ssim, SSIM_AVAILABLE
+        if SSIM_AVAILABLE:
+            compressed_img = Image.open(filepath)
+            ssim_score = calculate_ssim(original_for_ssim, compressed_img)
+            compressed_img.close()
+
+            if ssim_score is not None and ssim_score < ssim_threshold:
+                ssim_warning = True
+
     result = {
         'success': success,
         'final_size_mb': final_size_mb,
         'quality_used': best_quality,
-        'suggested_dimensions': None
+        'suggested_dimensions': None,
+        'ssim_score': ssim_score,
+        'ssim_warning': ssim_warning
     }
 
     if success:
-        result['message'] = f'Compressed to {final_size_mb:.2f} MB at quality {best_quality}'
+        msg = f'Compressed to {final_size_mb:.2f} MB at quality {best_quality}'
+        if ssim_score is not None:
+            msg += f' (SSIM: {ssim_score:.4f})'
+        result['message'] = msg
     else:
         # Calculate suggested dimensions
         suggested_dims = calculate_dimension_for_target_size(
@@ -431,7 +523,13 @@ def save_image(
     format: str = 'JPEG',
     quality: int = 100,
     target_size_mb: Optional[float] = None,
-    source_filepath: Optional[Path] = None
+    source_filepath: Optional[Path] = None,
+    min_quality: int = MIN_COMPRESSION_QUALITY,
+    progressive: bool = False,
+    subsampling: int = 2,
+    use_mozjpeg: bool = False,
+    ssim_threshold: Optional[float] = None,
+    original_for_ssim: Optional[Image.Image] = None
 ) -> Optional[dict]:
     """
     Save image to file with specified format and quality.
@@ -443,6 +541,12 @@ def save_image(
         quality: Quality for JPEG (1-100), ignored for PNG
         target_size_mb: Optional target file size in MB (JPEG/WEBP only)
         source_filepath: Original file path (for compression size check optimization)
+        min_quality: Minimum quality for compression (default 75)
+        progressive: Enable progressive JPEG encoding
+        subsampling: Chroma subsampling (0=4:4:4, 1=4:2:2, 2=4:2:0)
+        use_mozjpeg: Apply MozJPEG lossless optimization
+        ssim_threshold: Minimum SSIM score required (0.0-1.0)
+        original_for_ssim: Original image for SSIM comparison
 
     Returns:
         Optional[dict]: Compression result if target_size_mb is provided, None otherwise
@@ -460,7 +564,13 @@ def save_image(
     if target_size_mb is not None and format in ('JPEG', 'WEBP'):
         return compress_to_target_size(
             image, filepath, format, target_size_mb,
-            source_filepath=source_filepath
+            min_quality=min_quality,
+            source_filepath=source_filepath,
+            progressive=progressive,
+            subsampling=subsampling,
+            use_mozjpeg=use_mozjpeg,
+            ssim_threshold=ssim_threshold,
+            original_for_ssim=original_for_ssim
         )
 
     # Ensure parent directory exists
@@ -479,7 +589,10 @@ def save_image(
         elif image.mode != 'RGB':
             image = image.convert('RGB')
 
-        image.save(filepath, format=format, quality=quality, optimize=True)
+        image.save(
+            filepath, format=format, quality=quality, optimize=True,
+            progressive=progressive, subsampling=subsampling
+        )
 
     elif format == 'PNG':
         # PNG supports transparency, keep as-is

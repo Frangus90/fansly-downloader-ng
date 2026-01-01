@@ -140,12 +140,29 @@ The built-in Image Crop Tool allows you to batch process and crop downloaded ima
 - **Format Options** - Export as JPEG, PNG, or WebP with quality control
 - **Batch Export** - Process entire queue with one click
 
+**Compression Preview:**
+- **Estimated File Size** - See the compressed file size in real-time as you adjust settings
+- **Before/After Comparison** - Visual slider to compare original vs compressed quality side-by-side
+- **Zoom & Pan** - Scroll to zoom in on details, right-click drag to pan when zoomed
+- **SSIM Score** - Color-coded quality indicator (green = excellent, yellow = good, red = poor)
+- **Smart Format Detection** - Warns when PNG is selected (lossless, no quality difference to compare)
+
+**Advanced Compression Options:**
+- **Target File Size** - Compress images to a specific file size (e.g., 5 MB) while maximizing quality
+- **MozJPEG Optimization** - 10-15% smaller files at the same visual quality
+- **SSIM Quality Validation** - Warns when compression reduces perceptual quality below your threshold
+- **Chroma Subsampling** - Choose between best quality (4:4:4), balanced (4:2:2), or smallest size (4:2:0)
+- **Minimum Quality Floor** - Prevent over-compression by setting a quality floor (60-90)
+- **Progressive JPEG** - Better loading experience for web use
+
 **Usage:**
 1. Open Tools → Image Crop Tool from the main menu
 2. Upload images or drag-and-drop them onto the window
-3. Adjust crop box on each image or apply aspect ratio to all
-4. Choose output format and quality settings
-5. Process batch to export all cropped images
+3. Use the **Crop Preview** tab to adjust crop box on each image
+4. Switch to **Compress Preview** tab to compare original vs compressed quality
+5. Choose output format and quality settings
+6. Expand "Advanced Options" for compression fine-tuning
+7. Process batch to export all cropped images
 
 **File Handling:**
 - Automatically detects existing files and offers overwrite/skip options
