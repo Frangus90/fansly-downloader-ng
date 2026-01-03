@@ -2,7 +2,7 @@
 
 ## 🗒️ Release Notes
 
-### Unreleased
+### 1.5.0 2026-01-04
 
 **Major Addition:**
 - **OnlyFans Support** - Full platform integration with dedicated GUI tab and CLI (`onlyfans_downloader.py`)
