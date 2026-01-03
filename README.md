@@ -31,7 +31,8 @@ This is a rewrite/refactoring of [Avnsx](https://github.com/Avnsx)'s original [F
 ## Features
 
 - **Dual-Platform Support** - Separate tabs for Fansly and OnlyFans with independent configurations
-- **Multiple Download Modes** - Timeline posts, messages, and collections (Fansly)
+- **Multiple Download Modes** - Timeline posts, messages, collections (Fansly), and single post downloads (both platforms)
+- **Single Post Download** - Download individual posts by URL or ID with automatic creator detection
 - **Modern GUI** - Dark theme interface with tabbed platform switching and real-time progress tracking
 - **Command-Line Support** - Full CLI for automation and advanced users (both platforms)
 - **Incremental Downloads** - Download only new content since last run
@@ -120,6 +121,8 @@ python onlyfans_downloader.py -i
 - **Setup Wizard** - Automatic configuration on first run (Fansly)
 - **Creator Management** - Visual list to add/remove creators (both platforms)
 - **Subscription Import** - Import all subscribed creators automatically (both platforms)
+- **Download Mode Selection** - Choose Timeline or Single Post mode (both platforms)
+- **Single Post Download** - Enter post URL or ID to download individual posts
 - **Real-time Progress** - See downloads in progress with file counts
 - **Connection Testing** - Verify credentials before downloading
 - **Log Access** - Press Ctrl+L to view diagnostic logs
@@ -188,6 +191,9 @@ python fansly_downloader_ng.py -i
 # Specify creators via command line
 python fansly_downloader_ng.py -u creator1,creator2
 
+# Single post download (interactive - prompts for post ID)
+python fansly_downloader_ng.py -m single
+
 # Silent mode for scripts/scheduled tasks
 python fansly_downloader_ng.py -ni -npox
 ```
@@ -208,6 +214,9 @@ python onlyfans_downloader.py -i
 
 # Specify creators via command line
 python onlyfans_downloader.py -u creator1,creator2
+
+# Single post download (interactive - prompts for post ID)
+python onlyfans_downloader.py -m Single
 
 # Silent mode for scripts/scheduled tasks
 python onlyfans_downloader.py -ni -npox

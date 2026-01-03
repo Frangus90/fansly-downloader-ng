@@ -12,6 +12,11 @@
   - Built-in credential extraction guide
 
 **New Features:**
+- **Single Post Download** - Download individual posts by URL or ID (both platforms)
+  - GUI integration with dedicated input field and mode selection
+  - Auto-detects creator from post - creates correct folder automatically
+  - Works with existing deduplication - files go to Timeline folder
+  - Supports both URL format and raw post ID input
 - **Subscription Import** - Automatically import all subscribed creators (both platforms)
 - **Post Limit Settings** - Configure initial download limits for new creators
 - **Image Crop Tool** - Built-in bulk image cropping and batch processing
